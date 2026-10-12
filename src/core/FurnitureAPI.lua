@@ -48,9 +48,14 @@ return function(ASTRAL)
         local caps = {}
         if id == "" then return caps end
 
-        if hasAny(id, {"bed", "crib"}) then caps.sleepy = true end
-        if hasAny(id, {"shower", "bathtub", "bath_tub"}) then caps.dirty = true end
-        if id:find("toilet", 1, true) then caps.toilet = true end
+        -- Score against furniture the current handlers can actually use,
+        -- rather than decorative/untested furniture with a similar name.
+        if id == "basiccrib" then caps.sleepy = true end
+        if id == "modernshower" or id == "cheap_pet_bathtub_tutorial"
+            or id == "cheappetbathtub" or id == "cheap_pet_bathtub" then
+            caps.dirty = true
+        end
+        if id == "toilet" then caps.toilet = true end
 
         local bowlLike = id:find("bowl", 1, true)
             or id:find("feeder", 1, true)
