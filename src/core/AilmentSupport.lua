@@ -8,7 +8,7 @@ return function(ASTRAL)
     local Fsys = require(RS:WaitForChild("Fsys"))
     local ClientData = Fsys.load("ClientData")
     local EquippedPets = Fsys.load("EquippedPets")
-    local S = { Cooldowns = {}, Version = "0.1.3-dev.6.2" }
+    local S = { Cooldowns = {}, Version = "0.1.4-dev.6.3" }
 
     function S:Log(message)
         print("[ASTRAL NEEDS] " .. tostring(message))
@@ -125,6 +125,7 @@ return function(ASTRAL)
         local deadline = os.clock() + totalTimeout
         local baseline = Game:GetAilmentProgress(kind) or 0
         local maxAttempts = 3
+        local resetAttempted = false
         local candidates = { furniture }
         local seenFurniture = { [furniture.unique] = true }
         local Furniture = ASTRAL.Furniture
@@ -191,6 +192,29 @@ return function(ASTRAL)
                 end
 
                 if attempt < maxAttempts and os.clock() < deadline then
+                    -- Manual recovery test: removing and re-equipping the same
+                    -- pet restored Sleepy progress after furniture rejected it.
+                    -- Try once per ailment run; do not switch to another pet.
+                    if not resetAttempted and ASTRAL.Pets then
+                        resetAttempted = true
+                        self:Log(kind .. ": resetting pet after rejected furniture activation")
+                        local resetOk, resetReason = ASTRAL.Pets:ResetFurnitureInteraction(petUnique)
+                        self:Log(kind .. ": pet reset " .. (resetOk and "confirmed" or
+                            ("not confirmed: " .. tostring(resetReason))))
+                        if resetOk then
+                            -- Allow the newly equipped pet's character to spawn
+                            -- before using its root CFrame on the next attempt.
+                            local readyUntil = math.min(deadline, os.clock() + 3)
+                            while os.clock() < readyUntil do
+                                if context:IsCancelled() then return false, "Cancelled" end
+                                if Game:GetCurrentPetUnique() ~= petUnique then
+                                    return false, "Pet changed after reset"
+                                end
+                                if self:PetRoot() then break end
+                                task.wait(0.2)
+                            end
+                        end
+                    end
                     local nextFurniture = candidates[math.min(attempt + 1, #candidates)]
                     if nextFurniture and nextFurniture.unique ~= furniture.unique then
                         self:Log(kind .. ": activation returned without progress; trying alternate "
