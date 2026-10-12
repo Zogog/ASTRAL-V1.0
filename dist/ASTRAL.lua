@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.6.1 — Pet Queue hotfix
+    ASTRAL 1.0.0-dev.6.2 — Furniture interaction resilience
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6.1-pet-queue",
-    Build = "Pet Queue + capability-safe UI + resilient furniture discovery",
+    Version = "1.0.0-dev.6.2-pet-queue",
+    Build = "Pet Queue + alternate furniture interaction retries",
 
     Repository = {
         Owner = "Zogog",
