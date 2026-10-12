@@ -9,7 +9,7 @@ return function(ASTRAL)
         Name = "Pet Queue",
         Page = "Pets",
         Description = "Grow All or build a manual pet queue; switch after Full Grown.",
-        Version = "0.2.0-dev.6.6-queue-foundation",
+        Version = "0.2.1-dev.6.6-queue-ui",
         Implemented = true,
         Enabled = false,
         Busy = false,
@@ -95,6 +95,13 @@ return function(ASTRAL)
             }
         end
         return result
+    end
+
+    function Queue:GetEligiblePets()
+        local current = Pets:GetCurrent()
+        return Pets:GetGrowablePets({
+            currentUnique = current and current.unique or nil,
+        })
     end
 
     function Queue:SetMode(mode)
