@@ -8,7 +8,7 @@ return function(ASTRAL)
     local Fsys = require(RS:WaitForChild("Fsys"))
     local ClientData = Fsys.load("ClientData")
     local EquippedPets = Fsys.load("EquippedPets")
-    local S = { Cooldowns = {}, Version = "0.1.7-dev.6.5.1-ds-wrapper" }
+    local S = { Cooldowns = {}, Version = "0.1.8-dev.6.9.1-preferred-house" }
 
     function S:Log(message)
         print("[ASTRAL NEEDS] " .. tostring(message))
