@@ -15,7 +15,7 @@ return function(ASTRAL)
     local okMinigames, MinigameClientManager = pcall(load, "MinigameClientManager")
     if not okMinigames then MinigameClientManager = nil end
 
-    local okKindDB, KindDB = pcall(load, "InventoryDB")
+    local okKindDB, KindDB = pcall(load, "KindDB")
     if not okKindDB then KindDB = nil end
 
     local NewNet = ReplicatedStorage:WaitForChild("adoptme_new_net", 10)
@@ -597,7 +597,7 @@ return function(ASTRAL)
         Halloween.Twigs = #twigs
 
         if Halloween.TwigsContributed >= 8 then
-            Halloween.CurrentAction = "Twigs: Jacobin Pigeon unlocked"
+            Halloween.CurrentAction = "Twigs: Jacobean Pigeon unlocked"
             return false
         end
         if #twigs == 0 then
@@ -652,7 +652,7 @@ return function(ASTRAL)
         end
 
         if Halloween.TwigsContributed >= 8 then
-            log("Jacobin Pigeon twig requirement complete")
+            log("Jacobean Pigeon twig requirement complete")
         end
         return true
     end
@@ -995,7 +995,7 @@ return function(ASTRAL)
                         Halloween.CurrentAction = "Crypt: waiting for Rusty Keys"
                     elseif Halloween.TwigEnabled then
                         Halloween.CurrentAction = Halloween.TwigsContributed >= 8
-                            and "Twigs: Jacobin Pigeon unlocked"
+                            and "Twigs: Jacobean Pigeon unlocked"
                             or "Twigs: waiting for Twigs"
                     end
                     Halloween.Busy = false
