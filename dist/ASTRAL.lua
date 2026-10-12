@@ -1,24 +1,21 @@
 --[[
-    ASTRAL 1.0.0-dev.3.1 — First Automation
+    ASTRAL 1.0.0-dev.4 — Feeding fallback (experimental)
 
-    This is the only file the executor needs to load directly.
-    Feature/core/UI modules are fetched independently from this repository.
-
-    Repository:
-      https://github.com/Zogog/ASTRAL-V1.0
+    Only this loader is injected directly. Core/UI/feature modules
+    are fetched independently from the repository.
+    Repository: https://github.com/Zogog/ASTRAL-V1.0
 ]]
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.3.1",
-    Build = "First Automation / Cache Fix",
+    Version = "1.0.0-dev.4",
+    Build = "Hungry / Thirsty feeding fallback",
 
     Repository = {
         Owner = "Zogog",
         Name = "ASTRAL-V1.0",
         Branch = "main",
     },
-
     Boot = {
         Loaded = {},
         Failed = {},
@@ -43,7 +40,6 @@ local BASE_URL = string.format(
     repo.Name,
     repo.Branch
 )
-
 -- Ordered dependency manifest.
 -- Required modules abort startup if they cannot be loaded.
 -- Optional modules fail independently and ASTRAL continues.
@@ -53,23 +49,18 @@ local MANIFEST = {
     { id = "runtime",        path = "src/core/Runtime.lua",        required = true  },
     { id = "scheduler",      path = "src/core/Scheduler.lua",      required = true  },
     { id = "game_api",       path = "src/core/GameAPI.lua",        required = true  },
-    { id = "module_manager", path = "src/core/ModuleManager.lua",                    required = true  },
-
-    -- First real automation vertical slice.
-    { id = "ailments",       path = "src/modules/autofarm/AilmentRegistry.lua",       required = true  },
-    { id = "autofarm",       path = "src/modules/autofarm/Autofarm.lua",              required = true  },
-    { id = "play",           path = "src/modules/autofarm/ailments/Play.lua",          required = true  },
-
-    -- Everything not yet migrated remains represented by harmless stubs.
-    { id = "feature_stubs",  path = "src/modules/Stubs.lua",                         required = false },
-
-    -- UI is last because it consumes State, Config, Runtime, Scheduler and Modules.
-    { id = "window",         path = "src/ui/Window.lua",                             required = true  },
+    { id = "feeding_api",    path = "src/core/FeedingAPI.lua",     required = true  },
+    { id = "module_manager", path = "src/core/ModuleManager.lua", required = true  },
+    { id = "ailments",       path = "src/modules/autofarm/AilmentRegistry.lua", required = true  },
+    { id = "autofarm",       path = "src/modules/autofarm/Autofarm.lua",        required = true  },
+    { id = "play",           path = "src/modules/autofarm/ailments/Play.lua",   required = true  },
+    { id = "feeding",        path = "src/modules/autofarm/ailments/Feeding.lua", required = true },
+    { id = "feature_stubs",  path = "src/modules/Stubs.lua",      required = false },
+    { id = "window",         path = "src/ui/Window.lua",          required = true  },
 }
 
 local function fetch(path)
     local lastError
-
     for attempt = 1, 3 do
         -- A fresh query string on every request bypasses URL-based caches.
         -- This does not override an uncommitted GitHub change or replication delay.
@@ -78,7 +69,6 @@ local function fetch(path)
             .. "?astral=" .. ASTRAL.Version
             .. "&fresh=" .. nonce
             .. "-" .. tostring(attempt)
-
         local ok, result = pcall(function()
             return game:HttpGet(url)
         end)
@@ -95,7 +85,6 @@ local function fetch(path)
 
     return nil, tostring(lastError or "request failed")
 end
-
 local function loadModule(entry)
     local source, fetchError = fetch(entry.path)
     if not source then
@@ -111,7 +100,6 @@ local function loadModule(entry)
     if not ok then
         return false, "Module execution: " .. tostring(exported)
     end
-
     -- ASTRAL modules normally export a function that receives shared context.
     if type(exported) == "function" then
         local initOk, initResult = pcall(exported, ASTRAL)
@@ -128,7 +116,6 @@ local function loadModule(entry)
 
     return true
 end
-
 local function fail(entry, reason)
     ASTRAL.Boot.Failed[entry.id] = {
         path = entry.path,
@@ -146,7 +133,6 @@ end
 
 for _, entry in ipairs(MANIFEST) do
     local ok, reason = loadModule(entry)
-
     if ok then
         print(string.format("[ASTRAL] Loaded %s", entry.id))
     else
@@ -164,7 +150,6 @@ for _, entry in ipairs(MANIFEST) do
         end
     end
 end
-
 if ASTRAL.State then
     ASTRAL.State.Runtime = "READY"
     ASTRAL.State:Log("ASTRAL " .. ASTRAL.Version .. " loaded")
@@ -182,7 +167,6 @@ if ASTRAL.State then
         end)()
     ))
 end
-
 if ASTRAL.UI and ASTRAL.UI.Refresh then
     ASTRAL.UI:Refresh()
 end
