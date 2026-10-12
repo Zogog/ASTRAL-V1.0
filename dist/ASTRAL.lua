@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.2 — Modular Foundation
+    ASTRAL 1.0.0-dev.3 — First Automation
 
     This is the only file the executor needs to load directly.
     Feature/core/UI modules are fetched independently from this repository.
@@ -10,8 +10,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.2",
-    Build = "Modular Foundation",
+    Version = "1.0.0-dev.3",
+    Build = "First Automation",
 
     Repository = {
         Owner = "Zogog",
@@ -53,12 +53,18 @@ local MANIFEST = {
     { id = "runtime",        path = "src/core/Runtime.lua",        required = true  },
     { id = "scheduler",      path = "src/core/Scheduler.lua",      required = true  },
     { id = "game_api",       path = "src/core/GameAPI.lua",        required = true  },
-    { id = "module_manager", path = "src/core/ModuleManager.lua",  required = true  },
+    { id = "module_manager", path = "src/core/ModuleManager.lua",                    required = true  },
 
-    { id = "feature_stubs",  path = "src/modules/Stubs.lua",       required = false },
+    -- First real automation vertical slice.
+    { id = "ailments",       path = "src/modules/autofarm/AilmentRegistry.lua",       required = true  },
+    { id = "autofarm",       path = "src/modules/autofarm/Autofarm.lua",              required = true  },
+    { id = "play",           path = "src/modules/autofarm/ailments/Play.lua",          required = true  },
+
+    -- Everything not yet migrated remains represented by harmless stubs.
+    { id = "feature_stubs",  path = "src/modules/Stubs.lua",                         required = false },
 
     -- UI is last because it consumes State, Config, Runtime, Scheduler and Modules.
-    { id = "window",         path = "src/ui/Window.lua",           required = true  },
+    { id = "window",         path = "src/ui/Window.lua",                             required = true  },
 }
 
 local function fetch(path)
