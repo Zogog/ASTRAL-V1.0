@@ -11,7 +11,7 @@ return function(ASTRAL)
 
     local GameAPI = {
         Ready = true,
-        Version = "0.1.0",
+        Version = "0.1.1-dev.6.5-ds-play",
         Remotes = {},
     }
 
@@ -259,54 +259,71 @@ return function(ASTRAL)
         return tonumber(ailment.progress) or 0
     end
 
-    function GameAPI:ThrowPlayToy(toyUnique)
-        local serverUseTool = self:GetRemote("ToolAPI/ServerUseTool")
+    function GameAPI:ThrowPlayToy(toyUnique, petUnique, petCharacter)
+        -- Dusk & Shine 4.1.3 path: create the throw object specifically for
+        -- the target pet, then make that pet grab and drop the spawned object.
         local createPetObject = self:GetRemote("PetObjectAPI/CreatePetObject")
-        local unequip = self:GetRemote("ToolAPI/Unequip")
+        local grabPetObject = self:GetRemote("PetObjectAPI/GrabPetObject")
+        local dropPetObject = self:GetRemote("PetObjectAPI/DropPetObject")
 
-        if not serverUseTool or not createPetObject or not unequip then
-            return false, "Required Play remote(s) unavailable"
+        if not createPetObject or not grabPetObject or not dropPetObject then
+            return false, "Required D&S Play remote(s) unavailable"
+        end
+        if not petUnique or not petCharacter then
+            return false, "Pet identity/model unavailable for D&S Play"
         end
 
-        serverUseTool:InvokeServer(toyUnique, "START")
-
-        local streamingId = createPetObject:InvokeServer(
+        local created = createPetObject:InvokeServer(
             "__Enum_PetObjectCreatorType_1",
             {
                 reaction_name = "ThrowToyReaction",
                 unique_id = toyUnique,
+                pet_unique = petUnique,
             }
         )
 
-        unequip:InvokeServer(
-            toyUnique,
-            {
-                from_throw_toy = true,
-            }
-        )
+        local object = typeof(created) == "Instance"
+            and (created:FindFirstChild("Model") or created)
+            or nil
 
-        serverUseTool:InvokeServer(toyUnique, "END", nil)
+        -- D&S also searches Workspace.PetObjects because CreatePetObject may
+        -- return no Instance even though the server created the object.
+        if not object then
+            local petObjects = workspace:FindFirstChild("PetObjects")
+            local deadline = os.clock() + 0.5
+            repeat
+                if petObjects then
+                    for _, child in ipairs(petObjects:GetChildren()) do
+                        local itemUnique = child:FindFirstChild("ItemUniqueId")
+                        if itemUnique and itemUnique.Value == toyUnique then
+                            object = child:FindFirstChild("Model") or child
+                            break
+                        end
+                    end
+                end
+                if not object then task.wait(0.05) end
+            until object or os.clock() >= deadline
+        end
 
-        return true, streamingId
+        if not object then
+            return false, "D&S Play object was not created/found"
+        end
+
+        grabPetObject:FireServer(petCharacter, object)
+        task.wait(0.3)
+        dropPetObject:FireServer(petCharacter)
+
+        -- Match D&S's local cleanup after the grab/drop reaction has fired.
+        pcall(function()
+            if object and object.Parent then object:Destroy() end
+        end)
+
+        return true, object
     end
 
-    function GameAPI:CleanupPlayToy(toyUnique)
-        local unequip = self:GetRemote("ToolAPI/Unequip")
-        local serverUseTool = self:GetRemote("ToolAPI/ServerUseTool")
-
-        if unequip then
-            pcall(function()
-                unequip:InvokeServer(toyUnique, {
-                    from_throw_toy = true,
-                })
-            end)
-        end
-
-        if serverUseTool then
-            pcall(function()
-                serverUseTool:InvokeServer(toyUnique, "END", nil)
-            end)
-        end
+    function GameAPI:CleanupPlayToy()
+        -- D&S's Play path does not use ToolAPI START/END or Unequip.
+        -- The spawned pet object is cleaned up immediately after Grab/Drop.
     end
 
     ASTRAL.Game = GameAPI
