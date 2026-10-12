@@ -25,7 +25,7 @@ return function(ASTRAL)
         Name = "Halloween 2026",
         Page = "Events",
         Description = "Ghost Gallery, Crypt, Twigs, Candy Corn, quests, event shop and session statistics.",
-        Version = "0.1.3-dev.6.11.3-twig-diagnostics",
+        Version = "0.1.4-dev.6.11.4-char-wrapper-location",
         Implemented = true,
         Enabled = false,
         Busy = false,
@@ -95,16 +95,46 @@ return function(ASTRAL)
         return NewNet:FindFirstChild(name) or NewNet:WaitForChild(name, 1)
     end
 
+    local function wrapperLocation(wrapper)
+        if type(wrapper) ~= "table" then return nil end
+        local location = wrapper.location
+        if type(location) == "table" then
+            return location.destination_id or location.id or location.location or location.name
+        end
+        return type(location) == "string" and location or nil
+    end
+
     local function getLocation()
+        -- InteriorsM is useful when it reports an interior, but in the live
+        -- HauntedHotel test it returned no id even though the transition had
+        -- visibly completed. D&S 4.1.3 tracks the authoritative destination
+        -- from ClientData's char_wrapper.location.destination_id, so mirror
+        -- that source before falling back to the older generic location key.
         if InteriorsM and InteriorsM.get_current_location then
             local ok, location = pcall(InteriorsM.get_current_location)
             if ok and type(location) == "table" and location.id then
                 return location.id
             end
         end
+
+        local id = wrapperLocation(safeGet("char_wrapper", true))
+            or wrapperLocation(safeGet("char_wrapper"))
+        if id then return id end
+
+        local okData, data = pcall(function()
+            return ClientData.get_data and ClientData.get_data() or nil
+        end)
+        if okData and type(data) == "table" then
+            local playerData = data[player.Name]
+            if type(playerData) == "table" then
+                id = wrapperLocation(playerData.char_wrapper)
+                if id then return id end
+            end
+        end
+
         local location = safeGet("location")
         if type(location) == "table" then
-            return location.id or location.location or location.name
+            return location.destination_id or location.id or location.location or location.name or ""
         end
         return type(location) == "string" and location or ""
     end
