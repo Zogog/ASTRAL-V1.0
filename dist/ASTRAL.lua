@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.6.10.3 — Exclusive Pet Switching
+    ASTRAL 1.0.0-dev.6.11 — Halloween 2026 Suite
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6.10.3-exclusive-equip",
-    Build = "Exclusive pet switching + Neon Factory targeted progression",
+    Version = "1.0.0-dev.6.11-halloween-suite",
+    Build = "Halloween 2026 suite + Neon Factory targeted progression",
 
     Repository = {
         Owner = "Zogog",
@@ -76,7 +76,7 @@ local MANIFEST = {
     { id = "pet_queue",       path = "src/modules/pets/PetQueue.lua", required = true },
     { id = "egg_manager",     path = "src/modules/pets/EggManager.lua", required = true },
     { id = "pet_pens",        path = "src/modules/pets/PetPens.lua",  required = false },
-    { id = "neon_factory",    path = "src/modules/pets/NeonFactory.lua", required = true },
+    { id = "neon_factory",    path = "src/modules/pets/NeonFactory.lua", required = true },\n    { id = "halloween_2026",  path = "src/modules/events/Halloween2026.lua", required = true },
 
     -- One file per core pet ailment.
     { id = "mystery",     path = "src/modules/autofarm/ailments/Mystery.lua",     required = true },
