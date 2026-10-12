@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.5-modular — One module per core pet ailment
+    ASTRAL 1.0.0-dev.6 — Pet Queue progression
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.5.1-furniture",
-    Build = "18 modular core pet ailments + automatic furniture discovery",
+    Version = "1.0.0-dev.6-pet-queue",
+    Build = "18 modular core pet ailments + Pet Queue progression",
 
     Repository = {
         Owner = "Zogog",
@@ -49,6 +49,7 @@ local MANIFEST = {
     { id = "runtime",        path = "src/core/Runtime.lua",        required = true  },
     { id = "scheduler",      path = "src/core/Scheduler.lua",      required = true  },
     { id = "game_api",       path = "src/core/GameAPI.lua",        required = true  },
+    { id = "pet_api",        path = "src/core/PetAPI.lua",         required = true  },
     { id = "furniture_api",  path = "src/core/FurnitureAPI.lua",   required = true  },
     { id = "feeding_api",     path = "src/core/FeedingAPI.lua",       required = true  },
     { id = "feeding_support", path = "src/core/FeedingSupport.lua",   required = true  },
@@ -57,6 +58,7 @@ local MANIFEST = {
     { id = "module_manager",  path = "src/core/ModuleManager.lua",    required = true  },
     { id = "ailments",        path = "src/modules/autofarm/AilmentRegistry.lua", required = true },
     { id = "autofarm",        path = "src/modules/autofarm/Autofarm.lua", required = true },
+    { id = "pet_queue",       path = "src/modules/pets/PetQueue.lua", required = true },
 
     -- One file per core pet ailment.
     { id = "mystery",     path = "src/modules/autofarm/ailments/Mystery.lua",     required = true },
