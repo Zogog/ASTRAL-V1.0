@@ -62,6 +62,7 @@ local MANIFEST = {
     { id = "pet_queue",       path = "src/modules/pets/PetQueue.lua", required = true },
     { id = "egg_manager",     path = "src/modules/pets/EggManager.lua", required = true },
     { id = "pet_pens",        path = "src/modules/pets/PetPens.lua",  required = false },
+    { id = "neon_factory",    path = "src/modules/pets/NeonFactory.lua", required = true },
 
     -- One file per core pet ailment.
     { id = "mystery",     path = "src/modules/autofarm/ailments/Mystery.lua",     required = true },
