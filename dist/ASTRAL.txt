@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.6.11.1 — Halloween Twig Guard
+    ASTRAL 1.0.0-dev.6.11.2 — Halloween Location Guard
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6.11.1-twig-guard",
-    Build = "Halloween 2026 suite + guarded Twig progression",
+    Version = "1.0.0-dev.6.11.2-event-location-guard",
+    Build = "Halloween 2026 suite + protected event interiors",
 
     Repository = {
         Owner = "Zogog",
