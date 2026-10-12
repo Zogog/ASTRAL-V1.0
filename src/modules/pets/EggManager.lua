@@ -178,6 +178,12 @@ return function(ASTRAL)
                 queue:SetEnabled(false, "Egg Manager took active slot ownership")
             end
 
+            local farm = ASTRAL.Modules:Get("pet_farm")
+            if farm and not farm.Enabled then
+                farm:SetEnabled(true)
+                log("enabled shared ailment Autofarm")
+            end
+
             self.LastMessage = "Scanning egg inventory"
             log("enabled; Pet Queue disabled for egg-slot ownership")
         else
