@@ -9,7 +9,7 @@ return function(ASTRAL)
         Name = "Pet Queue",
         Page = "Pets",
         Description = "Grow All or build a manual pet queue; switch after Full Grown.",
-        Version = "0.2.4-dev.6.9-eggs-exclusive",
+        Version = "0.2.5-dev.6.9.3-normal-first",
         Implemented = true,
         Enabled = false,
         Busy = false,
@@ -93,6 +93,9 @@ return function(ASTRAL)
                 age = pet.age,
                 xp = pet.xp,
                 targetXP = pet.targetXP,
+                isNeon = pet.isNeon == true,
+                isMega = pet.isMega == true,
+                variant = pet.variant or "NORMAL",
             }
         end
         return result
@@ -255,10 +258,25 @@ return function(ASTRAL)
 
         local current, candidates = self:Snapshot()
 
-        -- A growable equipped pet is already the correct queue target.
+        -- A growable equipped pet is normally already the correct target.
+        -- In Grow All, however, generic progression should not consume Neon or
+        -- Mega pets while a lower-tier variant is available. Those variants
+        -- are reserved for the future Neon Factory unless normals are exhausted.
         if current and not current.isEgg and current.age ~= nil and current.age < 6 then
-            self.LastMessage = "Growing " .. current.name
-            return false
+            local currentRank = current.isMega and 2 or (current.isNeon and 1 or 0)
+            local best = candidates[1]
+            local bestRank = best and (best.isMega and 2 or (best.isNeon and 1 or 0)) or currentRank
+            if self.Mode ~= "grow_all" or bestRank >= currentRank then
+                self.LastMessage = "Growing " .. current.name
+                return false
+            end
+            self.LastMessage = string.format(
+                "Preserving %s %s; switching to %s pet",
+                tostring(current.variant or "variant"),
+                tostring(current.name),
+                bestRank == 0 and "normal" or "lower-tier"
+            )
+            log(self.LastMessage)
         end
 
         -- An equipped egg only blocks the queue while Egg Manager owns it.
@@ -282,9 +300,10 @@ return function(ASTRAL)
         self.LastSwitch = os.clock()
         local fromName = current and current.name or "No pet"
         log(string.format(
-            "%s -> equipping %s (age %s, xp %s)",
+            "%s -> equipping %s [%s] (age %s, xp %s)",
             fromName,
             nextPet.name,
+            tostring(nextPet.variant or "NORMAL"),
             tostring(nextPet.age),
             tostring(nextPet.xp)
         ))
