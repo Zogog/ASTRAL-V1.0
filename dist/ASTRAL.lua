@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.6.6.1 — Pet Queue v2 interface
+    ASTRAL 1.0.0-dev.6.6.2 — Pet Queue UI cache isolation
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6.6.1-pet-queue-ui",
-    Build = "Verified D&S interactions + interactive Pet Queue v2",
+    Version = "1.0.0-dev.6.6.2-pet-queue-ui",
+    Build = "Verified D&S interactions + executor-safe Pet Queue v2 UI",
 
     Repository = {
         Owner = "Zogog",
