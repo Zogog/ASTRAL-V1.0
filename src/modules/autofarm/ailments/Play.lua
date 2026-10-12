@@ -2,7 +2,7 @@ return function(ASTRAL)
     local Play = {
         Id = "play",
         Name = "Play",
-        Version = "0.1.3-dev.6.5.1-ds",
+        Version = "0.1.4-dev.6.5.2-ds",
         Priority = 50,
         RetryAfter = 0,
     }
@@ -84,7 +84,14 @@ return function(ASTRAL)
                 )
 
                 local support = ASTRAL.NeedSupport
-                local _, petCharacter = support and support:PetRoot()
+                if not support then
+                    error("NeedSupport unavailable for D&S Play")
+                end
+
+                -- Do not wrap this multi-return call in an 'and' expression:
+                -- Lua would collapse PetRoot() to its first result and discard
+                -- the pet character.
+                local _, petCharacter = support:PetRoot()
                 if not petCharacter then
                     error("Equipped pet model unavailable for D&S Play")
                 end
