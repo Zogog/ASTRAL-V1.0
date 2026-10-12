@@ -162,6 +162,9 @@ return function(ASTRAL)
         local configured = tonumber(ASTRAL.Config and ASTRAL.Config.HouseSlot)
         if configured and configured >= 1 and configured % 1 == 0 then return configured end
         local Furniture = ASTRAL.Furniture
+        if Furniture and Furniture.SelectPreferredHome then
+            return Furniture:SelectPreferredHome(false)
+        end
         return Furniture and Furniture.DiscoveredSlots and Furniture.DiscoveredSlots[1] or nil
     end
     function S:HouseFurniture(ids)
