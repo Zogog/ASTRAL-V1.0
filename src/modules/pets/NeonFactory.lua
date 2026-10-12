@@ -235,6 +235,10 @@ return function(ASTRAL)
             "%s target %s = %s",
             tostring(kind), string.upper(targetType), enabled == true and "ON" or "OFF"
         ))
+        local queue = ASTRAL.Modules:Get("pet_queue")
+        if queue and queue.Snapshot then pcall(function() queue:Snapshot() end) end
+        local pens = ASTRAL.Modules:Get("pet_pens")
+        if pens and pens.Enabled then pens.ForceCycle = true end
         return true
     end
 
@@ -507,9 +511,14 @@ return function(ASTRAL)
     function Factory:SetEnabled(enabled)
         self.Enabled = enabled == true
         self.LastMessage = self.Enabled
-            and "Factory armed; selected ready targets will fuse automatically"
-            or "Planner active; automatic fusion off"
+            and "Factory armed; selected targets now drive progression and fusion"
+            or "Planner active; automatic progression/fusion off"
         log(self.LastMessage)
+
+        local queue = ASTRAL.Modules:Get("pet_queue")
+        if queue and queue.Snapshot then pcall(function() queue:Snapshot() end) end
+        local pens = ASTRAL.Modules:Get("pet_pens")
+        if pens and pens.Enabled then pens.ForceCycle = true end
         return true
     end
 
