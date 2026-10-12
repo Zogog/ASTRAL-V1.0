@@ -8,7 +8,7 @@ return function(ASTRAL)
     local Fsys = require(RS:WaitForChild("Fsys"))
     local ClientData = Fsys.load("ClientData")
     local EquippedPets = Fsys.load("EquippedPets")
-    local S = { Cooldowns = {}, Version = "0.1.2-dev.5.1" }
+    local S = { Cooldowns = {}, Version = "0.1.3-dev.6.2" }
 
     function S:Log(message)
         print("[ASTRAL NEEDS] " .. tostring(message))
@@ -125,8 +125,20 @@ return function(ASTRAL)
         local deadline = os.clock() + totalTimeout
         local baseline = Game:GetAilmentProgress(kind) or 0
         local maxAttempts = 3
+        local candidates = { furniture }
+        local seenFurniture = { [furniture.unique] = true }
+        local Furniture = ASTRAL.Furniture
+        if Furniture and Furniture.GetMatches then
+            for _, candidate in ipairs(Furniture:GetMatches(ids)) do
+                if candidate.unique and not seenFurniture[candidate.unique] then
+                    seenFurniture[candidate.unique] = true
+                    table.insert(candidates, candidate)
+                end
+            end
+        end
 
         for attempt = 1, maxAttempts do
+            furniture = candidates[math.min(attempt, #candidates)] or furniture
             if context:IsCancelled() then return false, "Cancelled" end
             if Game:GetCurrentPetUnique() ~= petUnique then return false, "Pet changed" end
             if not Game:PetHasAilment(kind) then return true, "Complete" end
@@ -179,7 +191,14 @@ return function(ASTRAL)
                 end
 
                 if attempt < maxAttempts and os.clock() < deadline then
-                    self:Log(kind .. ": activation returned without progress; retrying")
+                    local nextFurniture = candidates[math.min(attempt + 1, #candidates)]
+                    if nextFurniture and nextFurniture.unique ~= furniture.unique then
+                        self:Log(kind .. ": activation returned without progress; trying alternate "
+                            .. tostring(nextFurniture.id) .. " -> " .. tostring(nextFurniture.unique)
+                            .. " (slot " .. tostring(nextFurniture.slot) .. ")")
+                    else
+                        self:Log(kind .. ": activation returned without progress; retrying")
+                    end
                     task.wait(0.75)
                 end
             end
