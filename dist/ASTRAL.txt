@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6.9-egg-manager",
-    Build = "Egg Manager v1 + exclusive active-slot ownership + Bored platform fix",
+    Version = "1.0.0-dev.6.9.1-preferred-house",
+    Build = "Preferred Autofarm house + bowl discovery + Egg Manager v1",
 
     Repository = {
         Owner = "Zogog",
