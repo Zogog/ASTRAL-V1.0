@@ -6,7 +6,7 @@ return function(ASTRAL)
     local player = Players.LocalPlayer
 
     local UI = {
-        Version = "0.2.0-dev.6.6-pet-queue-ui",
+        Version = "0.2.1-dev.6.6.2-pet-queue-ui",
         Pages = {},
         Nav = {},
         ModuleCards = {},
@@ -885,13 +885,16 @@ return function(ASTRAL)
             end
         end
 
+        -- Keep the base window refresh independent of optional detailed
+        -- panels. In particular, never let a feature-panel call poison the
+        -- status bar update in executors with thread capability restrictions.
+        UI.StatusLabel.Text =
+            ASTRAL.State.Runtime .. "  |  " .. ASTRAL.Scheduler:Status()
+
         if self.RefreshPetQueue then
             local ok, err = pcall(function() self:RefreshPetQueue() end)
             if not ok then warn("[ASTRAL UI] Pet Queue refresh:", err) end
         end
-
-        UI.StatusLabel.Text =
-            ASTRAL.State.Runtime .. "  |  " .. ASTRAL.Scheduler:Status()
     end
 
     local minimized = false
