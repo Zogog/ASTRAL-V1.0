@@ -8,7 +8,7 @@ return function(ASTRAL)
     local Fsys = require(RS:WaitForChild("Fsys"))
     local ClientData = Fsys.load("ClientData")
     local EquippedPets = Fsys.load("EquippedPets")
-    local S = { Cooldowns = {}, Version = "0.1.6-dev.6.5-ds-furniture" }
+    local S = { Cooldowns = {}, Version = "0.1.7-dev.6.5.1-ds-wrapper" }
 
     function S:Log(message)
         print("[ASTRAL NEEDS] " .. tostring(message))
@@ -36,9 +36,13 @@ return function(ASTRAL)
         return not Game:PetHasAilment(kind), "Timed out"
     end
     function S:PetCharacter()
+        local currentUnique = Game:GetCurrentPetUnique()
+        local dsChar = Game:GetPetCharacter(currentUnique)
+        if dsChar then return dsChar end
+
         local wrappers = Game:GetEquippedPetWrappers()
         local wrapper = wrappers and wrappers[1]
-        if wrapper and typeof(wrapper.char) == "Instance" then return wrapper.char end
+        if wrapper and typeof(wrapper.char) == "Instance" and wrapper.char.Parent then return wrapper.char end
         local ok, legacy = pcall(function() return ClientData.get("pet_char_wrapper") end)
         if ok and type(legacy) == "table" and typeof(legacy.char) == "Instance" then
             return legacy.char
