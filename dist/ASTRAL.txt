@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.6.5 — D&S interaction parity
+    ASTRAL 1.0.0-dev.6.5.1 — D&S pet wrapper parity
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6.5-ds-interactions",
-    Build = "D&S furniture exit lifecycle + pet-object Play",
+    Version = "1.0.0-dev.6.5.1-ds-interactions",
+    Build = "D&S furniture lifecycle + pet_char_wrappers Play",
 
     Repository = {
         Owner = "Zogog",
