@@ -6,7 +6,7 @@ return function(ASTRAL)
     local player = Players.LocalPlayer
 
     local UI = {
-        Version = "0.4.0-dev.6.9-egg-manager",
+        Version = "0.5.0-dev.6.10-neon-planner",
         Pages = {},
         Nav = {},
         ModuleCards = {},
@@ -969,6 +969,300 @@ return function(ASTRAL)
         end
     end
 
+    -- Neon Factory v1 planner. Inventory scanning happens in NeonFactory.lua's
+    -- background worker; this panel consumes cache-only plain Lua snapshots.
+    local neonFactory = ASTRAL.Modules:Get("neon_factory")
+    if neonFactory and UI.Pages["Neon Factory"] then
+        local neonPanel = new("Frame", {
+            Name = "NeonFactoryV1",
+            Size = UDim2.new(1, 0, 0, 458),
+            BackgroundColor3 = C.panel,
+            BorderSizePixel = 0,
+            Parent = UI.Pages["Neon Factory"],
+        })
+        corner(neonPanel, 10)
+        stroke(neonPanel, 0.55)
+
+        new("TextLabel", {
+            Text = "Neon Factory v1  |  PRODUCTION PLANNER",
+            Position = UDim2.fromOffset(14, 10),
+            Size = UDim2.new(1, -28, 0, 22),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamSemibold,
+            TextSize = 14,
+            TextColor3 = C.text,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = neonPanel,
+        })
+
+        local neonStatus = new("TextLabel", {
+            Text = "Scanning pet inventory...",
+            Position = UDim2.fromOffset(14, 34),
+            Size = UDim2.new(1, -28, 0, 34),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.Gotham,
+            TextSize = 10,
+            TextColor3 = C.sub,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Top,
+            Parent = neonPanel,
+        })
+
+        local view = "ready"
+        local function viewButton(textValue, x)
+            local button = new("TextButton", {
+                Text = textValue,
+                Position = UDim2.fromOffset(x, 74),
+                Size = UDim2.fromOffset(112, 28),
+                BackgroundColor3 = C.panel2,
+                BorderSizePixel = 0,
+                AutoButtonColor = false,
+                Font = Enum.Font.GothamBold,
+                TextSize = 10,
+                TextColor3 = C.sub,
+                Parent = neonPanel,
+            })
+            corner(button, 7)
+            return button
+        end
+
+        local readyButton = viewButton("READY NOW", 14)
+        local neonButton = viewButton("CLOSEST NEON", 132)
+        local megaButton = viewButton("CLOSEST MEGA", 250)
+
+        new("TextLabel", {
+            Text = "N/M toggles mark species you want the factory to produce. Planner v1 does not fuse automatically yet.",
+            Position = UDim2.fromOffset(376, 74),
+            Size = UDim2.new(1, -390, 0, 28),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.Gotham,
+            TextSize = 9,
+            TextWrapped = true,
+            TextColor3 = C.sub,
+            TextXAlignment = Enum.TextXAlignment.Right,
+            Parent = neonPanel,
+        })
+
+        local list = new("ScrollingFrame", {
+            Position = UDim2.fromOffset(14, 112),
+            Size = UDim2.new(1, -28, 0, 330),
+            CanvasSize = UDim2.new(),
+            AutomaticCanvasSize = Enum.AutomaticSize.Y,
+            ScrollBarThickness = 3,
+            ScrollBarImageColor3 = C.accent,
+            BackgroundColor3 = C.bg,
+            BorderSizePixel = 0,
+            Parent = neonPanel,
+        })
+        corner(list, 7)
+        new("UIPadding", {
+            PaddingTop = UDim.new(0, 6),
+            PaddingBottom = UDim.new(0, 6),
+            PaddingLeft = UDim.new(0, 6),
+            PaddingRight = UDim.new(0, 6),
+            Parent = list,
+        })
+        new("UIListLayout", {
+            Padding = UDim.new(0, 5),
+            SortOrder = Enum.SortOrder.LayoutOrder,
+            Parent = list,
+        })
+
+        local signature = ""
+
+        local function clearNeonRows()
+            for _, child in ipairs(list:GetChildren()) do
+                if child:IsA("Frame") then child:Destroy() end
+            end
+        end
+
+        local function xpText(value)
+            value = tonumber(value) or 0
+            if value <= 0 then return "growth ready" end
+            if value >= 1000 then return string.format("%.1fk XP left", value / 1000) end
+            return tostring(math.floor(value + 0.5)) .. " XP left"
+        end
+
+        local function makeRow(entry, index)
+            local rowFrame = new("Frame", {
+                Name = "NeonSpecies_" .. tostring(index),
+                Size = UDim2.new(1, -2, 0, 58),
+                BackgroundColor3 = C.panel2,
+                BorderSizePixel = 0,
+                LayoutOrder = index,
+                Parent = list,
+            })
+            corner(rowFrame, 6)
+
+            new("TextLabel", {
+                Text = tostring(entry.name or entry.kind or "Pet"),
+                Position = UDim2.fromOffset(10, 5),
+                Size = UDim2.new(1, -210, 0, 20),
+                BackgroundTransparency = 1,
+                Font = Enum.Font.GothamSemibold,
+                TextSize = 11,
+                TextColor3 = C.text,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = rowFrame,
+            })
+
+            local detail
+            if view == "ready" then
+                local parts = {}
+                if (entry.readyNeons or 0) > 0 then
+                    table.insert(parts, "NEON READY x" .. tostring(entry.readyNeons))
+                end
+                if (entry.readyMegas or 0) > 0 then
+                    table.insert(parts, "MEGA READY x" .. tostring(entry.readyMegas))
+                end
+                detail = table.concat(parts, "  |  ")
+            elseif view == "neon" then
+                detail = string.format(
+                    "Normal %d/4  |  Full Grown %d/4  |  %s",
+                    math.min(entry.normal or 0, 4),
+                    math.min(entry.normalFullGrown or 0, 4),
+                    (entry.normal or 0) >= 4
+                        and xpText(entry.neonRemainingXP)
+                        or (tostring(entry.neonMissingPets or 0) .. " pet(s) missing")
+                )
+            else
+                detail = string.format(
+                    "Neon %d/4  |  Luminous %d/4  |  %s",
+                    math.min(entry.neon or 0, 4),
+                    math.min(entry.neonFullGrown or 0, 4),
+                    (entry.neon or 0) >= 4
+                        and xpText(entry.megaRemainingXP)
+                        or (tostring(entry.megaMissingNeons or 0) .. " Neon(s) missing")
+                )
+            end
+
+            new("TextLabel", {
+                Text = detail,
+                Position = UDim2.fromOffset(10, 28),
+                Size = UDim2.new(1, -210, 0, 22),
+                BackgroundTransparency = 1,
+                Font = Enum.Font.Gotham,
+                TextSize = 9,
+                TextColor3 = C.sub,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = rowFrame,
+            })
+
+            local neonToggle = new("TextButton", {
+                Text = entry.makeNeon and "NEON ON" or "NEON OFF",
+                AnchorPoint = Vector2.new(1, 0.5),
+                Position = UDim2.new(1, -102, 0.5, 0),
+                Size = UDim2.fromOffset(92, 30),
+                BackgroundColor3 = C.bg,
+                BorderSizePixel = 0,
+                AutoButtonColor = false,
+                Font = Enum.Font.GothamBold,
+                TextSize = 9,
+                TextColor3 = entry.makeNeon and C.green or C.sub,
+                Parent = rowFrame,
+            })
+            corner(neonToggle, 6)
+
+            local megaToggle = new("TextButton", {
+                Text = entry.makeMega and "MEGA ON" or "MEGA OFF",
+                AnchorPoint = Vector2.new(1, 0.5),
+                Position = UDim2.new(1, -5, 0.5, 0),
+                Size = UDim2.fromOffset(92, 30),
+                BackgroundColor3 = C.bg,
+                BorderSizePixel = 0,
+                AutoButtonColor = false,
+                Font = Enum.Font.GothamBold,
+                TextSize = 9,
+                TextColor3 = entry.makeMega and C.green or C.sub,
+                Parent = rowFrame,
+            })
+            corner(megaToggle, 6)
+
+            ASTRAL.Runtime:Connect(neonToggle.MouseButton1Click, function()
+                neonFactory:SetTarget(entry.kind, "neon", not entry.makeNeon)
+                signature = ""
+            end)
+            ASTRAL.Runtime:Connect(megaToggle.MouseButton1Click, function()
+                neonFactory:SetTarget(entry.kind, "mega", not entry.makeMega)
+                signature = ""
+            end)
+        end
+
+        local function selectView(nextView)
+            view = nextView
+            signature = ""
+        end
+        ASTRAL.Runtime:Connect(readyButton.MouseButton1Click, function() selectView("ready") end)
+        ASTRAL.Runtime:Connect(neonButton.MouseButton1Click, function() selectView("neon") end)
+        ASTRAL.Runtime:Connect(megaButton.MouseButton1Click, function() selectView("mega") end)
+
+        function UI:RefreshNeonFactory()
+            local now = os.clock()
+            if self._NeonRefreshAt and now < self._NeonRefreshAt then return end
+            self._NeonRefreshAt = now + 0.35
+
+            local info = neonFactory:GetStatus()
+            neonStatus.Text = string.format(
+                "%d species scanned  |  %d ready now  |  %d Neon targets  |  %d Mega targets\n%s",
+                info.species or 0,
+                info.ready or 0,
+                info.neonTargets or 0,
+                info.megaTargets or 0,
+                tostring(info.message or "")
+            )
+            neonStatus.TextColor3 = info.busy and C.amber or C.sub
+
+            readyButton.TextColor3 = view == "ready" and C.green or C.sub
+            neonButton.TextColor3 = view == "neon" and C.green or C.sub
+            megaButton.TextColor3 = view == "mega" and C.green or C.sub
+
+            local entries = view == "ready" and neonFactory:GetReady()
+                or (view == "neon" and neonFactory:GetClosestNeon()
+                    or neonFactory:GetClosestMega())
+
+            local parts = {view}
+            for _, entry in ipairs(entries) do
+                table.insert(parts, table.concat({
+                    tostring(entry.kind),
+                    tostring(entry.normal),
+                    tostring(entry.normalFullGrown),
+                    tostring(entry.neon),
+                    tostring(entry.neonFullGrown),
+                    tostring(entry.mega),
+                    tostring(entry.makeNeon),
+                    tostring(entry.makeMega),
+                }, ":"))
+            end
+            local nextSignature = table.concat(parts, "|")
+            if nextSignature == signature then return end
+            signature = nextSignature
+
+            clearNeonRows()
+            for i, entry in ipairs(entries) do makeRow(entry, i) end
+
+            if #entries == 0 then
+                local empty = new("Frame", {
+                    Size = UDim2.new(1, -2, 0, 48),
+                    BackgroundColor3 = C.panel2,
+                    BorderSizePixel = 0,
+                    Parent = list,
+                })
+                corner(empty, 6)
+                new("TextLabel", {
+                    Text = view == "ready"
+                        and "Nothing is ready to fuse right now."
+                        or "No candidates in this view yet.",
+                    Size = UDim2.fromScale(1, 1),
+                    BackgroundTransparency = 1,
+                    Font = Enum.Font.Gotham,
+                    TextSize = 10,
+                    TextColor3 = C.sub,
+                    Parent = empty,
+                })
+            end
+        end
+    end
+
     -- Pet Pens v2 dashboard. All values come from PetPens.lua's cached
     -- plain-Lua snapshots; this UI never calls ClientData/Fsys itself.
     local petPens = ASTRAL.Modules:Get("pet_pens")
@@ -1274,6 +1568,11 @@ return function(ASTRAL)
         if self.RefreshEggManager then
             local ok, err = pcall(function() self:RefreshEggManager() end)
             if not ok then warn("[ASTRAL UI] Egg Manager refresh:", err) end
+        end
+
+        if self.RefreshNeonFactory then
+            local ok, err = pcall(function() self:RefreshNeonFactory() end)
+            if not ok then warn("[ASTRAL UI] Neon Factory refresh:", err) end
         end
     end
 
