@@ -6,7 +6,7 @@ return function(ASTRAL)
     local player = Players.LocalPlayer
 
     local UI = {
-        Version = "0.1.1-dev.6.1-ui-safe",
+        Version = "0.2.0-dev.6.6-pet-queue-ui",
         Pages = {},
         Nav = {},
         ModuleCards = {},
@@ -481,6 +481,309 @@ return function(ASTRAL)
         end
     end
 
+    -- Pet Queue v2 management surface. Queue policy remains in PetQueue.lua;
+    -- this panel only displays snapshots and invokes its public operations.
+    local petQueue = ASTRAL.Modules:Get("pet_queue")
+    if petQueue and UI.Pages.Pets then
+        local manager = new("Frame", {
+            Name = "PetQueueV2",
+            Size = UDim2.new(1, 0, 0, 350),
+            BackgroundColor3 = C.panel,
+            BorderSizePixel = 0,
+            Parent = UI.Pages.Pets,
+        })
+        corner(manager, 10)
+        stroke(manager, 0.55)
+
+        new("TextLabel", {
+            Text = "Pet Queue v2",
+            Position = UDim2.fromOffset(14, 10),
+            Size = UDim2.new(1, -28, 0, 22),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamSemibold,
+            TextSize = 14,
+            TextColor3 = C.text,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = manager,
+        })
+
+        local currentLabel = new("TextLabel", {
+            Text = "Current: scanning...",
+            Position = UDim2.fromOffset(14, 36),
+            Size = UDim2.new(1, -28, 0, 34),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.Gotham,
+            TextSize = 11,
+            TextColor3 = C.sub,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Top,
+            Parent = manager,
+        })
+
+        local function smallButton(textValue, x, width)
+            local button = new("TextButton", {
+                Text = textValue,
+                Position = UDim2.fromOffset(x, 72),
+                Size = UDim2.fromOffset(width, 27),
+                BackgroundColor3 = C.panel2,
+                BorderSizePixel = 0,
+                AutoButtonColor = false,
+                Font = Enum.Font.GothamBold,
+                TextSize = 10,
+                TextColor3 = C.sub,
+                Parent = manager,
+            })
+            corner(button, 7)
+            return button
+        end
+
+        local growAllButton = smallButton("GROW ALL", 14, 92)
+        local manualButton = smallButton("MANUAL", 112, 92)
+
+        local inventoryLabel = new("TextLabel", {
+            Text = "",
+            Position = UDim2.fromOffset(216, 72),
+            Size = UDim2.new(1, -230, 0, 27),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.Gotham,
+            TextSize = 10,
+            TextColor3 = C.sub,
+            TextXAlignment = Enum.TextXAlignment.Right,
+            Parent = manager,
+        })
+
+        local function listPanel(title, xScale)
+            local titleLabel = new("TextLabel", {
+                Text = title,
+                Position = UDim2.new(xScale, xScale == 0 and 14 or 7, 0, 108),
+                Size = UDim2.new(0.5, -21, 0, 20),
+                BackgroundTransparency = 1,
+                Font = Enum.Font.GothamSemibold,
+                TextSize = 11,
+                TextColor3 = C.text,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = manager,
+            })
+
+            local list = new("ScrollingFrame", {
+                Position = UDim2.new(xScale, xScale == 0 and 14 or 7, 0, 130),
+                Size = UDim2.new(0.5, -21, 0, 146),
+                CanvasSize = UDim2.new(),
+                AutomaticCanvasSize = Enum.AutomaticSize.Y,
+                ScrollBarThickness = 2,
+                ScrollBarImageColor3 = C.accent,
+                BackgroundColor3 = C.bg,
+                BorderSizePixel = 0,
+                Parent = manager,
+            })
+            corner(list, 7)
+            new("UIPadding", {
+                PaddingTop = UDim.new(0, 5),
+                PaddingBottom = UDim.new(0, 5),
+                PaddingLeft = UDim.new(0, 5),
+                PaddingRight = UDim.new(0, 5),
+                Parent = list,
+            })
+            new("UIListLayout", {
+                Padding = UDim.new(0, 4),
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                Parent = list,
+            })
+            return list
+        end
+
+        local queueList = listPanel("ACTIVE QUEUE", 0)
+        local eligibleList = listPanel("ELIGIBLE PETS", 0.5)
+
+        local selectedQueued
+        local selectedEligible
+        local queueSignature = ""
+        local eligibleSignature = ""
+
+        local function petText(pet, index)
+            local prefix = index and (tostring(index) .. ". ") or ""
+            local stage = pet.age ~= nil and ("Age " .. tostring(pet.age)) or "Age ?"
+            local progress = ""
+            if pet.targetXP and pet.targetXP > 0 then
+                progress = string.format("  %.0f%%", math.clamp((pet.xp or 0) / pet.targetXP * 100, 0, 100))
+            end
+            return prefix .. tostring(pet.name or pet.kind or "Pet") .. "  |  " .. stage .. progress
+        end
+
+        local function clearRows(parent)
+            for _, child in ipairs(parent:GetChildren()) do
+                if child:IsA("TextButton") then child:Destroy() end
+            end
+        end
+
+        local function row(parent, pet, index, selectedGetter, selectedSetter)
+            local button = new("TextButton", {
+                Text = petText(pet, index),
+                Size = UDim2.new(1, -2, 0, 26),
+                BackgroundColor3 = selectedGetter() == pet.unique and C.panel2 or C.bg,
+                BorderSizePixel = 0,
+                AutoButtonColor = false,
+                Font = Enum.Font.Gotham,
+                TextSize = 10,
+                TextColor3 = selectedGetter() == pet.unique and C.text or C.sub,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = parent,
+            })
+            corner(button, 5)
+            new("UIPadding", {
+                PaddingLeft = UDim.new(0, 7),
+                Parent = button,
+            })
+            ASTRAL.Runtime:Connect(button.MouseButton1Click, function()
+                selectedSetter(pet.unique)
+                queueSignature = ""
+                eligibleSignature = ""
+            end)
+        end
+
+        local addButton = smallButton("ADD >", 14, 72)
+        addButton.Position = UDim2.fromOffset(14, 286)
+        local removeButton = smallButton("< REMOVE", 92, 82)
+        removeButton.Position = UDim2.fromOffset(92, 286)
+        local upButton = smallButton("UP", 184, 58)
+        upButton.Position = UDim2.fromOffset(184, 286)
+        local downButton = smallButton("DOWN", 248, 58)
+        downButton.Position = UDim2.fromOffset(248, 286)
+        local clearButton = smallButton("CLEAR", 316, 68)
+        clearButton.Position = UDim2.fromOffset(316, 286)
+
+        local helpLabel = new("TextLabel", {
+            Text = "Grow All finishes the most-developed eligible pets first. Manual follows your ordered list after the current pet finishes.",
+            Position = UDim2.fromOffset(14, 319),
+            Size = UDim2.new(1, -28, 0, 22),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.Gotham,
+            TextSize = 9,
+            TextWrapped = true,
+            TextColor3 = C.sub,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = manager,
+        })
+
+        ASTRAL.Runtime:Connect(growAllButton.MouseButton1Click, function()
+            petQueue:SetMode("grow_all")
+        end)
+        ASTRAL.Runtime:Connect(manualButton.MouseButton1Click, function()
+            petQueue:SetMode("manual")
+        end)
+        ASTRAL.Runtime:Connect(addButton.MouseButton1Click, function()
+            if selectedEligible then
+                local ok, reason = petQueue:AddPet(selectedEligible)
+                if not ok then warn("[ASTRAL UI] Pet Queue add:", reason) end
+                selectedEligible = nil
+                queueSignature, eligibleSignature = "", ""
+            end
+        end)
+        ASTRAL.Runtime:Connect(removeButton.MouseButton1Click, function()
+            if selectedQueued then
+                local ok, reason = petQueue:RemovePet(selectedQueued)
+                if not ok then warn("[ASTRAL UI] Pet Queue remove:", reason) end
+                selectedQueued = nil
+                queueSignature, eligibleSignature = "", ""
+            end
+        end)
+        ASTRAL.Runtime:Connect(upButton.MouseButton1Click, function()
+            if selectedQueued then
+                local ok, reason = petQueue:MovePet(selectedQueued, -1)
+                if not ok then warn("[ASTRAL UI] Pet Queue move:", reason) end
+                queueSignature = ""
+            end
+        end)
+        ASTRAL.Runtime:Connect(downButton.MouseButton1Click, function()
+            if selectedQueued then
+                local ok, reason = petQueue:MovePet(selectedQueued, 1)
+                if not ok then warn("[ASTRAL UI] Pet Queue move:", reason) end
+                queueSignature = ""
+            end
+        end)
+        ASTRAL.Runtime:Connect(clearButton.MouseButton1Click, function()
+            petQueue:ClearManual()
+            selectedQueued = nil
+            queueSignature, eligibleSignature = "", ""
+        end)
+
+        function UI:RefreshPetQueue()
+            local statusInfo = petQueue:GetStatus()
+            local current = statusInfo.current
+            if current then
+                local progress = ""
+                if current.targetXP and current.targetXP > 0 and current.age ~= nil and current.age < 6 then
+                    progress = string.format(
+                        " | stage %.0f%% (%s/%s XP)",
+                        math.clamp((current.xp or 0) / current.targetXP * 100, 0, 100),
+                        tostring(current.xp or 0),
+                        tostring(current.targetXP)
+                    )
+                end
+                currentLabel.Text = string.format(
+                    "Current: %s | Age %s%s%s",
+                    tostring(current.name),
+                    tostring(current.age or "?"),
+                    current.isFullGrown and " | Full Grown" or "",
+                    progress
+                )
+            else
+                currentLabel.Text = "Current: no equipped pet detected"
+            end
+
+            growAllButton.TextColor3 = petQueue.Mode == "grow_all" and C.green or C.sub
+            manualButton.TextColor3 = petQueue.Mode == "manual" and C.green or C.sub
+
+            local stats = statusInfo.inventory or {}
+            inventoryLabel.Text = string.format(
+                "%d growable | %d full grown | %d eggs | %d pen",
+                stats.growable or 0,
+                stats.fullGrown or 0,
+                stats.eggs or 0,
+                stats.penAssigned or 0
+            )
+
+            local queued = petQueue:GetQueue()
+            local qParts = {petQueue.Mode, tostring(selectedQueued)}
+            for i, pet in ipairs(queued) do
+                table.insert(qParts, tostring(i) .. ":" .. tostring(pet.unique) .. ":" .. tostring(pet.age) .. ":" .. tostring(pet.xp))
+            end
+            local qSig = table.concat(qParts, "|")
+            if qSig ~= queueSignature then
+                queueSignature = qSig
+                clearRows(queueList)
+                for i, pet in ipairs(queued) do
+                    row(queueList, pet, i,
+                        function() return selectedQueued end,
+                        function(unique) selectedQueued = unique end)
+                end
+            end
+
+            local eligible = petQueue:GetEligiblePets()
+            local eParts = {tostring(selectedEligible)}
+            for _, pet in ipairs(eligible) do
+                table.insert(eParts, tostring(pet.unique) .. ":" .. tostring(pet.age) .. ":" .. tostring(pet.xp))
+            end
+            local eSig = table.concat(eParts, "|")
+            if eSig ~= eligibleSignature then
+                eligibleSignature = eSig
+                clearRows(eligibleList)
+                for _, pet in ipairs(eligible) do
+                    row(eligibleList, pet, nil,
+                        function() return selectedEligible end,
+                        function(unique) selectedEligible = unique end)
+                end
+            end
+
+            local manual = petQueue.Mode == "manual"
+            addButton.TextColor3 = manual and selectedEligible and C.green or C.sub
+            removeButton.TextColor3 = manual and selectedQueued and C.amber or C.sub
+            upButton.TextColor3 = manual and selectedQueued and C.text or C.sub
+            downButton.TextColor3 = manual and selectedQueued and C.text or C.sub
+            clearButton.TextColor3 = manual and #petQueue.ManualOrder > 0 and C.amber or C.sub
+        end
+    end
+
     UI:Heading(
         "Diagnostics",
         "Diagnostics",
@@ -574,6 +877,11 @@ return function(ASTRAL)
             if statusInfo and statusInfo.message then
                 refs.Body.Text = module.Description .. "\nStatus: " .. tostring(statusInfo.message)
             end
+        end
+
+        if self.RefreshPetQueue then
+            local ok, err = pcall(function() self:RefreshPetQueue() end)
+            if not ok then warn("[ASTRAL UI] Pet Queue refresh:", err) end
         end
 
         UI.StatusLabel.Text =
