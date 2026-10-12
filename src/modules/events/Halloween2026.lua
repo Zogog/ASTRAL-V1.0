@@ -25,7 +25,7 @@ return function(ASTRAL)
         Name = "Halloween 2026",
         Page = "Events",
         Description = "Ghost Gallery, Crypt, Twigs, Candy Corn, quests, event shop and session statistics.",
-        Version = "0.1.0-dev.6.11-halloween-suite",
+        Version = "0.1.1-dev.6.11.1-twig-guard",
         Implemented = true,
         Enabled = false,
         Busy = false,
@@ -64,6 +64,8 @@ return function(ASTRAL)
         GhostLastPulse = 0,
         GhostLastTargetScan = 0,
         LastCandyClaim = 0,
+        LastTwigAttempt = 0,
+        TwigRetryAt = 0,
     }
 
     local function log(message)
@@ -597,6 +599,7 @@ return function(ASTRAL)
         Halloween.Twigs = #twigs
 
         if Halloween.TwigsContributed >= 8 then
+            Halloween.TwigEnabled = false
             Halloween.CurrentAction = "Twigs: Jacobean Pigeon unlocked"
             return false
         end
@@ -604,21 +607,39 @@ return function(ASTRAL)
             Halloween.CurrentAction = "Twigs: waiting for Twigs"
             return false
         end
+        if os.clock() < Halloween.TwigRetryAt then
+            Halloween.CurrentAction = "Twigs: waiting before retry"
+            return false
+        end
 
-        Halloween.CurrentAction = "Twigs: entering Haunted Hotel"
-        local ok = enterInterior("HauntedHotel", "MainDoor", {})
-        if not ok then return false end
+        Halloween.LastTwigAttempt = os.clock()
+        local before = Halloween.TwigsContributed
+        local wasInHotel = getLocation() == "HauntedHotel"
 
-        local _, root = character()
-        if root then
-            root.CFrame *= CFrame.new(0, 10, 0)
-            root.AssemblyLinearVelocity = Vector3.zero
-            supportPlatform(root)
+        if not wasInHotel then
+            Halloween.CurrentAction = "Twigs: entering Haunted Hotel for pigeon nest"
+            local ok, err = enterInterior("HauntedHotel", "MainDoor", {})
+            if not ok then
+                Halloween.LastError = "Twig hotel entry: " .. tostring(err)
+                Halloween.TwigRetryAt = os.clock() + 10
+                return false
+            end
+
+            -- Match the D&S nest setup once on entry. Never stack this offset
+            -- on repeated worker passes while already inside the Hotel.
+            local _, root = character()
+            if root then
+                root.CFrame *= CFrame.new(0, 10, 0)
+                root.AssemblyLinearVelocity = Vector3.zero
+                supportPlatform(root)
+            end
+            task.wait(0.75)
         end
 
         local contribute = getNet("Halloween2026/JacobeanPigeonNestContributeTwig")
         if not contribute then
             Halloween.CurrentAction = "Twigs: contribution remote unavailable"
+            Halloween.TwigRetryAt = os.clock() + 15
             return false
         end
 
@@ -628,31 +649,52 @@ return function(ASTRAL)
                 "Twigs: placing %d/8",
                 Halloween.TwigsContributed + 1
             )
+
             local callOk, result = pcall(function()
                 return contribute:InvokeServer({unique = unique})
             end)
             if not callOk then
-                Halloween.LastError = tostring(result)
+                Halloween.LastError = "Twig remote: " .. tostring(result)
+                log("Twig contribution remote error: " .. tostring(result))
+                Halloween.TwigRetryAt = os.clock() + 15
                 break
             end
+
             if type(result) == "table" and result.ok == false then
                 local reason = tostring(result.reason or "unknown")
-                if reason ~= "too_far" and reason ~= "nest_complete" then
-                    Halloween.LastError = "Twig: " .. reason
-                    task.wait(1)
-                end
+                Halloween.LastError = "Twig contribution: " .. reason
+                log("Twig contribution stopped: " .. reason)
+                Halloween.TwigRetryAt = os.clock() + (reason == "too_far" and 20 or 10)
                 break
             end
+
             if type(result) == "table" and result.twigs_contributed then
-                Halloween.TwigsContributed = result.twigs_contributed
+                Halloween.TwigsContributed = tonumber(result.twigs_contributed)
+                    or Halloween.TwigsContributed
             else
                 Halloween.TwigsContributed += 1
             end
+            log("Placed Twig: " .. tostring(Halloween.TwigsContributed) .. "/8")
             task.wait(1)
         end
 
+        -- Re-read the authoritative manager instead of repeatedly assuming
+        -- that a successful-looking remote call advanced the nest.
+        task.wait(0.5)
+        local afterNest = safeGet("halloween_2026_jacobean_pigeon_nest_manager")
+        local after = type(afterNest) == "table"
+            and tonumber(afterNest.twigs_contributed)
+            or Halloween.TwigsContributed
+        Halloween.TwigsContributed = after or Halloween.TwigsContributed
+
         if Halloween.TwigsContributed >= 8 then
-            log("Jacobean Pigeon twig requirement complete")
+            Halloween.TwigEnabled = false
+            Halloween.CurrentAction = "Twigs: Jacobean Pigeon unlocked"
+            log("Jacobean Pigeon twig requirement complete; Twig automation disabled")
+        elseif Halloween.TwigsContributed <= before then
+            Halloween.TwigRetryAt = math.max(Halloween.TwigRetryAt, os.clock() + 15)
+            Halloween.CurrentAction = "Twigs: no progress; retry paused"
+            log("Twig attempt made no progress (" .. tostring(before) .. "/8); pausing retries")
         end
         return true
     end
