@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.6.10.2 — Targeted Neon Progression
+    ASTRAL 1.0.0-dev.6.10.3 — Exclusive Pet Switching
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6.10.2-neon-targets",
-    Build = "Neon Factory targeted progression + fusion + planner",
+    Version = "1.0.0-dev.6.10.3-exclusive-equip",
+    Build = "Exclusive pet switching + Neon Factory targeted progression",
 
     Repository = {
         Owner = "Zogog",
