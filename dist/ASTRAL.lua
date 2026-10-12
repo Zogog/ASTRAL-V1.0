@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.6.6.2 — Pet Queue UI cache isolation
+    ASTRAL 1.0.0-dev.6.7 — Pet Pens restored
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6.6.2-pet-queue-ui",
-    Build = "Verified D&S interactions + executor-safe Pet Queue v2 UI",
+    Version = "1.0.0-dev.6.7-pet-pens",
+    Build = "Pet Queue v2 + restored Auto Pet Pens",
 
     Repository = {
         Owner = "Zogog",
@@ -59,6 +59,7 @@ local MANIFEST = {
     { id = "ailments",        path = "src/modules/autofarm/AilmentRegistry.lua", required = true },
     { id = "autofarm",        path = "src/modules/autofarm/Autofarm.lua", required = true },
     { id = "pet_queue",       path = "src/modules/pets/PetQueue.lua", required = true },
+    { id = "pet_pens",        path = "src/modules/pets/PetPens.lua",  required = false },
 
     -- One file per core pet ailment.
     { id = "mystery",     path = "src/modules/autofarm/ailments/Mystery.lua",     required = true },
