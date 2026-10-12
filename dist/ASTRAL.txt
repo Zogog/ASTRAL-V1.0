@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.6.9.1 — Preferred Autofarm House
+    ASTRAL 1.0.0-dev.6.9.2 — Unattended Runtime
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
@@ -46,7 +46,8 @@ local BASE_URL = string.format(
 local MANIFEST = {
     { id = "state",          path = "src/core/State.lua",          required = true  },
     { id = "config",         path = "src/core/Config.lua",         required = true  },
-    { id = "runtime",        path = "src/core/Runtime.lua",        required = true  },\n    { id = "anti_afk",       path = "src/core/AntiAFK.lua",        required = true  },
+    { id = "runtime",        path = "src/core/Runtime.lua",        required = true  },
+    { id = "anti_afk",       path = "src/core/AntiAFK.lua",        required = true  },
     { id = "scheduler",      path = "src/core/Scheduler.lua",      required = true  },
     { id = "game_api",       path = "src/core/GameAPI.lua",        required = true  },
     { id = "pet_api",        path = "src/core/PetAPI.lua",         required = true  },
