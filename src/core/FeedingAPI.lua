@@ -1,4 +1,4 @@
--- ASTRAL dev.4 feeding extension. Loaded after GameAPI, before ailment handlers.
+-- ASTRAL dev.6.9.1 feeding extension. Prefer discovered owned bowls in the preferred Autofarm house.
 -- Keeps dev.3 Play behaviour untouched.
 return function(ASTRAL)
     local Game = assert(ASTRAL.Game, "GameAPI must load before FeedingAPI")
@@ -88,7 +88,17 @@ return function(ASTRAL)
         if not ids or not petUnique then return false, "Unknown need" end
         local Furniture = ASTRAL.Furniture
         if not Furniture then return false, "FurnitureAPI unavailable" end
-        local furniture, reason = Furniture:Find(ids)
+        -- Exact ids are historically known (petfoodbowl/petwaterbowl), but
+        -- current furniture variants may carry prefixes/suffixes. Let the
+        -- preferred-house classifier discover compatible food/water bowls
+        -- first, then retain the exact-id lookup as a compatibility fallback.
+        local furniture, reason
+        if Furniture.FindNeedBowl then
+            furniture, reason = Furniture:FindNeedBowl(kind)
+        end
+        if not furniture then
+            furniture, reason = Furniture:Find(ids)
+        end
         if not furniture then return false, reason end
         local activate = self:GetRemote("HousingAPI/ActivateFurniture")
         if not activate then return false, "ActivateFurniture unavailable" end
