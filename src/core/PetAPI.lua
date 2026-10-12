@@ -12,7 +12,7 @@ return function(ASTRAL)
     local SharedConstants = load("SharedConstants")
 
     local PetAPI = {
-        Version = "0.1.3-dev.6.9.3-normal-first",
+        Version = "0.1.4-dev.6.10.3-exclusive-equip",
     }
 
     local function properties(item)
@@ -209,25 +209,68 @@ return function(ASTRAL)
 
     function PetAPI:Equip(unique)
         if not unique then return false, "Pet unique missing" end
-        local remote = ASTRAL.Game:GetRemote("ToolAPI/Equip")
-        if not remote then return false, "ToolAPI/Equip unavailable" end
+        local equip = ASTRAL.Game:GetRemote("ToolAPI/Equip")
+        if not equip then return false, "ToolAPI/Equip unavailable" end
+
+        -- ASTRAL's Pet Queue/Egg Manager own one active progression slot.
+        -- ToolAPI/Equip does not reliably replace an already-equipped pet:
+        -- it can leave the old wrapper active as well, after which wrappers[1]
+        -- may resolve back to the old pet. D&S 4.1.3 explicitly unequips
+        -- non-target active pets before equipping its desired target.
+        local wrappers = ASTRAL.Game:GetEquippedPetWrappers()
+        local targetAlreadyEquipped = false
+        local unequip = ASTRAL.Game:GetRemote("ToolAPI/Unequip")
+
+        for _, wrapper in ipairs(wrappers) do
+            local currentUnique = wrapper and wrapper.pet_unique
+            if currentUnique == unique then
+                targetAlreadyEquipped = true
+            elseif currentUnique and unequip then
+                local removedOk, removedErr = pcall(function()
+                    unequip:InvokeServer(currentUnique)
+                end)
+                if not removedOk then
+                    return false, "Previous pet unequip failed: " .. tostring(removedErr)
+                end
+            end
+        end
+
+        if targetAlreadyEquipped then
+            -- Give any non-target unequips above a moment to settle, then
+            -- confirm the target is the sole/current progression pet.
+            local deadline = os.clock() + 3
+            while os.clock() < deadline do
+                local active = ASTRAL.Game:GetEquippedPetWrappers()
+                local onlyTarget = #active == 1
+                    and active[1]
+                    and active[1].pet_unique == unique
+                if onlyTarget then return true end
+                task.wait(0.2)
+            end
+        end
+
+        -- Wait briefly for server-side unequips before adding the target.
+        if #wrappers > 0 then task.wait(0.35) end
 
         local ok, err = pcall(function()
-            remote:InvokeServer(unique, {
+            equip:InvokeServer(unique, {
                 use_sound_delay = true,
-                equip_as_last = false,
+                equip_as_last = true,
             })
         end)
         if not ok then return false, tostring(err) end
 
         local deadline = os.clock() + 5
         while os.clock() < deadline do
-            if ASTRAL.Game:GetCurrentPetUnique() == unique then
+            local active = ASTRAL.Game:GetEquippedPetWrappers()
+            if #active == 1
+                and active[1]
+                and active[1].pet_unique == unique then
                 return true
             end
             task.wait(0.2)
         end
-        return false, "Equip call returned but new pet was not confirmed"
+        return false, "Equip call returned but target was not confirmed as sole active pet"
     end
 
     -- Recovery for a pet left in a stale furniture interaction. The player
