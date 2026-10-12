@@ -1,4 +1,4 @@
--- ASTRAL Hauntlet 2 probe v0.1 - READ ONLY.
+-- ASTRAL Hauntlet 2 probe v0.2 - READ ONLY.
 -- Run once in Haunted Hotel lobby and once during an active Hauntlet 2 room.
 -- Does not invoke remotes, move the character, or mutate game state.
 local RS = game:GetService("ReplicatedStorage")
@@ -84,6 +84,36 @@ scan("WORLD",workspace,45,function(name)
     local s=name:lower()
     return s:find("haunt",1,true) or s:find("hotel",1,true) or s:find("bolt",1,true)
 end)
+local function showChildren(label,root,limit)
+    if not root then log(label,"unavailable"); return end
+    local n=0
+    log(label,"root",root:GetFullName(),"attributes:",preview(root:GetAttributes()))
+    for _,obj in ipairs(root:GetDescendants()) do
+        n+=1
+        if n>limit then break end
+        local value=""
+        if obj:IsA("ValueBase") then value=" value="..tostring(obj.Value) end
+        log(label,obj:GetFullName(),"["..obj.ClassName.."]"..value,"attributes:",preview(obj:GetAttributes()))
+    end
+    log(label,"items shown",math.min(n,limit))
+end
+local staticMap=workspace:FindFirstChild("StaticMap")
+if staticMap then
+    for _,obj in ipairs(staticMap:GetChildren()) do
+        if obj.Name:lower():find("hauntlet",1,true) and obj.Name:lower():find("minigame_state",1,true) then
+            showChildren("STATE",obj,120)
+        end
+    end
+end
+local interiors=workspace:FindFirstChild("Interiors")
+if interiors then
+    for _,interior in ipairs(interiors:GetChildren()) do
+        if interior.Name:find("HauntletInterior",1,true) then
+            local rooms=interior:FindFirstChild("Rooms")
+            showChildren("ACTIVE ROOMS",rooms,180)
+        end
+    end
+end
 scan("GUI",player:FindFirstChild("PlayerGui"),35,match)
 local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 if root then
