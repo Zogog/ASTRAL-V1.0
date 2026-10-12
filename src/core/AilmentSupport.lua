@@ -8,7 +8,7 @@ return function(ASTRAL)
     local Fsys = require(RS:WaitForChild("Fsys"))
     local ClientData = Fsys.load("ClientData")
     local EquippedPets = Fsys.load("EquippedPets")
-    local S = { Cooldowns = {}, Version = "0.1.0-dev.5" }
+    local S = { Cooldowns = {}, Version = "0.1.1-dev.5.1" }
 
     function S:Log(message)
         print("[ASTRAL NEEDS] " .. tostring(message))
@@ -104,37 +104,16 @@ return function(ASTRAL)
         return handler
     end
     function S:HouseSlot()
-        -- Optional explicit setting, for the user's own verified house slot.
-        local configSlot = tonumber(ASTRAL.Config and ASTRAL.Config.HouseSlot)
-        if configSlot and configSlot > 0 and configSlot % 1 == 0 then return configSlot end
-        for _, key in ipairs({"house_interior", "house", "housing", "house_slots"}) do
-            local ok, data = pcall(function() return ClientData.get(key) end)
-            if ok and type(data) == "table" then
-                for _, field in ipairs({"active_house_slot", "active_house_id", "house_id", "houseId"}) do
-                    local slot = tonumber(data[field])
-                    if slot and slot > 0 and slot % 1 == 0 then return slot end
-                end
-            end
-        end
-        return nil
+        -- Compatibility helper: return an explicitly configured slot first,
+        -- otherwise the first house slot discovered by FurnitureAPI.
+        local configured = tonumber(ASTRAL.Config and ASTRAL.Config.HouseSlot)
+        if configured and configured >= 1 and configured % 1 == 0 then return configured end
+        local Furniture = ASTRAL.Furniture
+        return Furniture and Furniture.DiscoveredSlots and Furniture.DiscoveredSlots[1] or nil
     end
     function S:HouseFurniture(ids)
-        local slot = self:HouseSlot()
-        if not slot then return nil, "House slot unknown (set ASTRAL.Config.HouseSlot for your own house)" end
-        local remote = self:Remote("HousingAPI/GetFurnitureWithinHouse")
-        if not remote then return nil, "Furniture lookup remote missing" end
-        local ok, records = pcall(function() return remote:InvokeServer(slot) end)
-        if not ok or type(records) ~= "table" then return nil, "House furniture query failed" end
-        local wanted = {}
-        for _, id in ipairs(ids) do wanted[string.lower(id)] = true end
-        for _, wrapper in pairs(records) do
-            local data = type(wrapper) == "table" and (wrapper.data or wrapper) or nil
-            if type(data) == "table" and type(data.unique) == "string"
-                and wanted[string.lower(tostring(data.id or ""))] then
-                return data
-            end
-        end
-        return nil, "Required furniture not owned: " .. table.concat(ids, ", ")
+        local Furniture = assert(ASTRAL.Furniture, "FurnitureAPI not loaded")
+        return Furniture:Find(ids)
     end
     function S:UseFurniture(kind, ids, interaction, petUnique, context, timeout)
         local furniture, reason = self:HouseFurniture(ids)
@@ -142,7 +121,9 @@ return function(ASTRAL)
         local root, petChar = self:PetRoot()
         if not root or not petChar then return false, "Equipped pet model unavailable" end
         local remote = self:Remote("HousingAPI/ActivateFurniture")
-        self:Log(kind .. ": using furniture " .. tostring(furniture.id) .. " / " .. tostring(interaction or "UseBlock"))
+        self:Log(kind .. ": using furniture " .. tostring(furniture.id)
+            .. " from slot " .. tostring(furniture.slot)
+            .. " / " .. tostring(interaction or "UseBlock"))
         local used, err = self:Call(remote, Player, furniture.unique, interaction or "UseBlock", { cframe = root.CFrame }, petChar)
         if not used then return false, err end
         return self:WaitClear(kind, petUnique, context, timeout or 30)

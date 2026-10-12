@@ -3,8 +3,6 @@
 return function(ASTRAL)
     local Game = assert(ASTRAL.Game, "GameAPI must load before FeedingAPI")
     local Players = game:GetService("Players")
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local ClientData = require(ReplicatedStorage:WaitForChild("Fsys")).load("ClientData")
     local player = Players.LocalPlayer
 
     local FALLBACK = {
@@ -12,42 +10,14 @@ return function(ASTRAL)
         thirsty = "water",
     }
     local BOWLS = {
-        hungry = { pet_food_bowl = true, petfoodbowl = true },
-        thirsty = { pet_water_bowl = true, petwaterbowl = true },
+        hungry = { "pet_food_bowl", "petfoodbowl" },
+        thirsty = { "pet_water_bowl", "petwaterbowl" },
     }
 
-    local function safeGet(key)
-        local ok, result = pcall(function() return ClientData.get(key) end)
-        if ok then return result end
-    end
-
     local function petModel()
-        local pets = workspace:FindFirstChild("Pets")
-        if not pets then return nil end
-        -- A model target is required by the observed furniture UseBlock call.
-        -- Do not guess if multiple pets are present.
-        local selected
-        for _, child in ipairs(pets:GetChildren()) do
-            if child:IsA("Model") then
-                if selected then return nil end
-                selected = child
-            end
-        end
-        return selected
-    end
-
-    local function activeHouseSlot()
-        -- ClientData schemas vary. Only accept an explicit numeric house slot;
-        -- never hard-code the previously observed slot 5.
-        for _, key in ipairs({ "house_interior", "house", "housing" }) do
-            local value = safeGet(key)
-            if type(value) == "table" then
-                for _, field in ipairs({ "house_id", "houseId", "active_house_id", "active_house_slot" }) do
-                    local id = tonumber(value[field])
-                    if id and id >= 1 and id % 1 == 0 then return id end
-                end
-            end
-        end
+        local wrappers = Game:GetEquippedPetWrappers()
+        local wrapper = wrappers and wrappers[1]
+        if wrapper and typeof(wrapper.char) == "Instance" then return wrapper.char end
         return nil
     end
 
@@ -114,32 +84,21 @@ return function(ASTRAL)
     end
 
     function Game:TryUseNeedBowl(kind, petUnique)
-        if not BOWLS[kind] or not petUnique then return false, "Unknown need" end
-        local interiors = workspace:FindFirstChild("HouseInteriors")
-        if not interiors then return false, "Not inside a loaded house" end
-        local slot = activeHouseSlot()
-        if not slot then return false, "Active house slot unresolved" end
-        local getFurniture = self:GetRemote("HousingAPI/GetFurnitureWithinHouse")
+        local ids = BOWLS[kind]
+        if not ids or not petUnique then return false, "Unknown need" end
+        local Furniture = ASTRAL.Furniture
+        if not Furniture then return false, "FurnitureAPI unavailable" end
+        local furniture, reason = Furniture:Find(ids)
+        if not furniture then return false, reason end
         local activate = self:GetRemote("HousingAPI/ActivateFurniture")
-        if not getFurniture or not activate then return false, "House remotes unavailable" end
-        local ok, furniture = pcall(function() return getFurniture:InvokeServer(slot) end)
-        if not ok or type(furniture) ~= "table" then return false, "Furniture lookup failed" end
-        local bowlUnique
-        for _, wrapper in pairs(furniture) do
-            local data = type(wrapper) == "table" and (wrapper.data or wrapper) or nil
-            if type(data) == "table" and type(data.unique) == "string"
-                and BOWLS[kind][string.lower(tostring(data.id or ""))] then
-                bowlUnique = data.unique
-                break
-            end
-        end
-        if not bowlUnique then return false, "No compatible house bowl" end
-        local character = player.Character
-        local root = character and character:FindFirstChild("HumanoidRootPart")
+        if not activate then return false, "ActivateFurniture unavailable" end
         local target = petModel()
-        if not root or not target then return false, "Character/pet model unresolved" end
+        local root = target and (target:FindFirstChild("HumanoidRootPart") or target.PrimaryPart)
+        if not root or not target then return false, "Equipped pet model unresolved" end
+        print(string.format("[ASTRAL FEEDING] %s: using %s from house slot %d",
+            kind, tostring(furniture.id), furniture.slot))
         local used, result = pcall(function()
-            return activate:InvokeServer(player, bowlUnique, "UseBlock", {
+            return activate:InvokeServer(player, furniture.unique, "UseBlock", {
                 cframe = root.CFrame,
             }, target)
         end)
