@@ -2,7 +2,7 @@ return function(ASTRAL)
     local Play = {
         Id = "play",
         Name = "Play",
-        Version = "0.1.0",
+        Version = "0.1.1-dev.6",
         Priority = 50,
     }
 
@@ -27,6 +27,26 @@ return function(ASTRAL)
         end
 
         local toy = candidate.item
+
+        -- Play depends on the physical PetEntity being present to notice and
+        -- react to the thrown object. Location transitions/pet switches can
+        -- leave the inventory wrapper available slightly before the model is.
+        local function waitForPetEntity(seconds)
+            local deadline = os.clock() + (seconds or 5)
+            while os.clock() < deadline do
+                if context:IsCancelled() then return false end
+                local support = ASTRAL.NeedSupport
+                local root = support and support:PetRoot()
+                if root then return true end
+                task.wait(0.2)
+            end
+            return false
+        end
+
+        if not waitForPetEntity(5) then
+            return false, "Equipped pet model not ready for Play"
+        end
+
         local throwCount = 0
         local deadline = os.clock() + 55
 
@@ -99,8 +119,17 @@ return function(ASTRAL)
                 if advanced then
                     task.wait(0.35)
                 else
-                    warn("[ASTRAL PLAY] Throw did not advance within 10s; retrying")
-                    task.wait(0.5)
+                    warn("[ASTRAL PLAY] Throw did not advance within 10s; resetting toy state")
+                    -- Best-effort reset before another legitimate captured
+                    -- throw sequence. This prevents a rejected START/object
+                    -- creation from leaving the toy state stale.
+                    ASTRAL.Game:CleanupPlayToy(toy.unique)
+
+                    if not waitForPetEntity(5) then
+                        warn("[ASTRAL PLAY] Pet model not ready after failed throw")
+                    end
+
+                    task.wait(1)
                 end
             end
         end)
