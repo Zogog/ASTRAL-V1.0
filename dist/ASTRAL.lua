@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.6.10.1 — Neon Factory Fusion
+    ASTRAL 1.0.0-dev.6.10.2 — Targeted Neon Progression
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6.10.1-neon-fusion",
-    Build = "Neon Factory fusion + planner + normal-first progression",
+    Version = "1.0.0-dev.6.10.2-neon-targets",
+    Build = "Neon Factory targeted progression + fusion + planner",
 
     Repository = {
         Owner = "Zogog",
