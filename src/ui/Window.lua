@@ -427,7 +427,12 @@ return function(ASTRAL)
                 warn("[ASTRAL UI] Could not toggle", module.Id, reason)
             end
 
-            UI:Refresh()
+            -- Some executor-created callback threads cannot touch GUI
+            -- Instances directly. Heartbeat will refresh on the next safe UI
+            -- frame, so an immediate refresh is best-effort only.
+            pcall(function()
+                UI:Refresh()
+            end)
         end)
 
         return card
