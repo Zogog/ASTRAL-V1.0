@@ -12,7 +12,7 @@ return function(ASTRAL)
         Name = "Neon Factory",
         Page = "Neon Factory",
         Description = "Plan Normal -> Neon -> Mega production and fuse selected ready targets.",
-        Version = "0.2.0-dev.6.10.1-fusion",
+        Version = "0.3.0-dev.6.10.2-target-progression",
         Implemented = true,
         Enabled = false,
         Busy = false,
@@ -277,6 +277,75 @@ return function(ASTRAL)
                 at = self.LastFusion.at,
             } or nil,
         }
+    end
+
+    local function speciesByKind()
+        local result = {}
+        for _, entry in ipairs(Factory.Species or {}) do
+            result[entry.kind] = entry
+        end
+        return result
+    end
+
+    -- Lower values are higher priority. This is intentionally exposed to the
+    -- Pet Queue/Pet Pens workers so selected Neon Factory targets drive actual
+    -- progression rather than only fusion.
+    function Factory:GetGrowthPriority(pet)
+        if not self.Enabled or type(pet) ~= "table" or pet.isEgg or pet.isMega then
+            return nil
+        end
+
+        local target = self.Targets[pet.kind]
+        if not target or (not target.neon and not target.mega) then return nil end
+
+        local groups = speciesByKind()
+        local group = groups[pet.kind] or {}
+        local remaining = Pets:GetRemainingGrowthXP(pet) or 0
+
+        if target.mega and pet.isNeon then
+            -- Existing Neons are the shortest path to a requested Mega.
+            return 0, tonumber(group.megaRemainingXP) or 0, remaining
+        end
+
+        if not pet.isNeon and (target.neon or target.mega) then
+            -- Normals create requested Neons, including intermediate Neons for
+            -- a Mega target. Prefer species closest to a completed set.
+            local missing = math.max(0, 4 - math.min(tonumber(group.normal) or 0, 4))
+            local work = tonumber(group.neonRemainingXP) or 0
+            return target.mega and 1 or 2, missing, work, remaining
+        end
+
+        return nil
+    end
+
+    function Factory:PrioritizeGrowthCandidates(candidates)
+        local result = {}
+        for i, pet in ipairs(candidates or {}) do result[i] = pet end
+        if not self.Enabled then return result end
+
+        table.sort(result, function(a, b)
+            local ap1, ap2, ap3, ap4 = self:GetGrowthPriority(a)
+            local bp1, bp2, bp3, bp4 = self:GetGrowthPriority(b)
+            local aTarget, bTarget = ap1 ~= nil, bp1 ~= nil
+            if aTarget ~= bTarget then return aTarget end
+            if aTarget then
+                if ap1 ~= bp1 then return ap1 < bp1 end
+                if (ap2 or 0) ~= (bp2 or 0) then return (ap2 or 0) < (bp2 or 0) end
+                if (ap3 or 0) ~= (bp3 or 0) then return (ap3 or 0) < (bp3 or 0) end
+                if (ap4 or 0) ~= (bp4 or 0) then return (ap4 or 0) < (bp4 or 0) end
+            end
+
+            -- Preserve the established normal -> Neon -> Mega fallback order
+            -- for pets outside the selected production targets.
+            local av = a.isMega and 2 or (a.isNeon and 1 or 0)
+            local bv = b.isMega and 2 or (b.isNeon and 1 or 0)
+            if av ~= bv then return av < bv end
+            if (a.age or 0) ~= (b.age or 0) then return (a.age or 0) > (b.age or 0) end
+            if (a.xp or 0) ~= (b.xp or 0) then return (a.xp or 0) > (b.xp or 0) end
+            return tostring(a.unique) < tostring(b.unique)
+        end)
+
+        return result
     end
 
     local function actionBlocked()
