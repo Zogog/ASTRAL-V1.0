@@ -9,7 +9,7 @@ return function(ASTRAL)
         Name = "Pet Queue",
         Page = "Pets",
         Description = "Grow All or build a manual pet queue; switch after Full Grown.",
-        Version = "0.2.3-dev.6.7-pens-coordination",
+        Version = "0.2.4-dev.6.9-eggs-exclusive",
         Implemented = true,
         Enabled = false,
         Busy = false,
@@ -216,17 +216,23 @@ return function(ASTRAL)
         }
     end
 
-    function Queue:SetEnabled(enabled)
+    function Queue:SetEnabled(enabled, reason)
         enabled = enabled == true
         if self.Enabled == enabled then return true end
         self.Enabled = enabled
         if enabled then
+            -- Pet Queue and Egg Manager are mutually exclusive owners of the
+            -- active equipped slot. The shared ailment Autofarm remains on.
+            local eggs = ASTRAL.Modules:Get("eggs")
+            if eggs and eggs.Enabled then
+                eggs:SetEnabled(false, "Pet Queue took active slot ownership")
+            end
             self.LastMessage = "Scanning pet inventory"
-            log("enabled")
+            log("enabled; Egg Manager disabled for pet-slot ownership")
             self:Snapshot()
         else
-            self.LastMessage = "Off"
-            log("disabled")
+            self.LastMessage = reason and ("Off - " .. tostring(reason)) or "Off"
+            log(reason and ("disabled - " .. tostring(reason)) or "disabled")
         end
         return true
     end
@@ -255,10 +261,11 @@ return function(ASTRAL)
             return false
         end
 
-        -- Eggs are intentionally owned by the future Egg Manager.
+        -- An equipped egg only blocks the queue while Egg Manager owns it.
+        -- If Pet Queue is enabled, exclusivity guarantees Egg Manager is off,
+        -- so continue below and replace the egg with the next growable pet.
         if current and current.isEgg then
-            self.LastMessage = "Egg equipped; waiting for Egg Manager"
-            return false
+            self.LastMessage = "Replacing equipped egg with Pet Queue target"
         end
 
         local nextPet = candidates[1]
