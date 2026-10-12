@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.6.9.2 — Unattended Runtime
+    ASTRAL 1.0.0-dev.6.9.3 — Normal-First Pet Queue
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6.9.2-unattended",
-    Build = "Anti-AFK + preferred Autofarm house + Egg Manager v1",
+    Version = "1.0.0-dev.6.9.3-normal-first",
+    Build = "Normal-first pet progression + Anti-AFK + Egg Manager v1",
 
     Repository = {
         Owner = "Zogog",
