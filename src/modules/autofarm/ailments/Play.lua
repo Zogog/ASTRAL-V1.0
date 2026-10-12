@@ -2,13 +2,19 @@ return function(ASTRAL)
     local Play = {
         Id = "play",
         Name = "Play",
-        Version = "0.1.2-dev.6.5-ds",
+        Version = "0.1.3-dev.6.5.1-ds",
         Priority = 50,
+        RetryAfter = 0,
     }
 
     function Play:CanRun()
-        return ASTRAL.Game:GetCurrentPetUnique() ~= nil
+        return os.clock() >= (self.RetryAfter or 0)
+            and ASTRAL.Game:GetCurrentPetUnique() ~= nil
             and ASTRAL.Game:FindPlayToy() ~= nil
+    end
+
+    function Play:Backoff(seconds)
+        self.RetryAfter = os.clock() + (seconds or 12)
     end
 
     function Play:Run(_, context)
@@ -44,6 +50,7 @@ return function(ASTRAL)
         end
 
         if not waitForPetEntity(5) then
+            self:Backoff(12)
             return false, "Equipped pet model not ready for Play"
         end
 
@@ -143,6 +150,7 @@ return function(ASTRAL)
         end)
 
         if not ok then
+            self:Backoff(12)
             warn("[ASTRAL PLAY] Pipeline error:", err)
             return false, tostring(err)
         end
@@ -152,6 +160,7 @@ return function(ASTRAL)
         end
 
         if ASTRAL.Game:PetHasAilment("play") then
+            self:Backoff(12)
             return false, "Timed out waiting for Play completion"
         end
 
