@@ -7,7 +7,7 @@ return function(ASTRAL)
     local ClientData = require(ReplicatedStorage:WaitForChild("Fsys")).load("ClientData")
 
     local Furniture = {
-        Version = "0.1.2-dev.6",
+        Version = "0.1.3-dev.6.2",
         MaxAutoSlot = 20,
         Slots = {},
         Scanned = {},
@@ -200,6 +200,44 @@ return function(ASTRAL)
         ))
 
         return nil, "Required furniture not found: " .. table.concat(ids, ", ")
+    end
+
+    function Furniture:GetMatches(ids)
+        local rank = {}
+        for _, id in ipairs(ids or {}) do
+            local key = normalise(id)
+            if key ~= "" and not rank[key] then rank[key] = #rank + 1 end
+        end
+
+        -- Preserve duplicate owned furniture instances. Find() intentionally
+        -- returns one preferred record, while interaction retries need distinct
+        -- uniques so a rejected/busy instance does not get retried repeatedly.
+        local matches, seen = {}, {}
+        for _, slot in ipairs(self.DiscoveredSlots) do
+            local snapshot = self.Slots[slot]
+            if snapshot then
+                for _, record in ipairs(snapshot.records) do
+                    local id = normalise(record.id)
+                    if rank[id] and not seen[record.unique] then
+                        seen[record.unique] = true
+                        table.insert(matches, {
+                            record = record,
+                            rank = rank[id],
+                        })
+                    end
+                end
+            end
+        end
+
+        table.sort(matches, function(a, b)
+            if a.rank ~= b.rank then return a.rank < b.rank end
+            if a.record.slot ~= b.record.slot then return a.record.slot < b.record.slot end
+            return tostring(a.record.unique) < tostring(b.record.unique)
+        end)
+
+        local records = {}
+        for _, entry in ipairs(matches) do table.insert(records, entry.record) end
+        return records
     end
 
     function Furniture:FindMatching(predicate, description, forceRefresh)
