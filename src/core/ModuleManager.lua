@@ -7,6 +7,13 @@ return function(ASTRAL)
     function Manager:Register(module)
         assert(type(module) == "table" and module.Id, "Invalid ASTRAL module")
 
+        -- A stale/legacy stub must never overwrite a real implemented module.
+        local existing = self.Items[module.Id]
+        if existing and existing.Implemented and not module.Implemented then
+            warn("[ASTRAL MODULES] Ignored stub for implemented module:", module.Id)
+            return false, "Implemented module already registered"
+        end
+
         if not self.Items[module.Id] then
             table.insert(self.Order, module.Id)
         end
