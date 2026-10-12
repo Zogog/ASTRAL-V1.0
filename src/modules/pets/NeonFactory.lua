@@ -4,6 +4,8 @@
 -- and stores per-species production targets. Fusion execution comes later.
 return function(ASTRAL)
     local Pets = assert(ASTRAL.Pets, "PetAPI must load before Neon Factory")
+    local env = (getgenv and getgenv()) or _G
+    env.ASTRALNeonTargets = env.ASTRALNeonTargets or {}
 
     local Factory = {
         Id = "neon_factory",
@@ -18,7 +20,7 @@ return function(ASTRAL)
         Ready = {},
         ClosestNeon = {},
         ClosestMega = {},
-        Targets = {},
+        Targets = env.ASTRALNeonTargets,
         LastScan = 0,
         ScanInterval = 8,
         LastMessage = "Planner ready",
@@ -209,6 +211,7 @@ return function(ASTRAL)
         end
         self.Targets[kind] = self.Targets[kind] or {}
         self.Targets[kind][targetType] = enabled == true
+        env.ASTRALNeonTargets = self.Targets
 
         -- Mega implies we are willing to create the intermediate Neons.
         if targetType == "mega" and enabled == true then
