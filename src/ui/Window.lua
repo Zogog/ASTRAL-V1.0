@@ -6,7 +6,7 @@ return function(ASTRAL)
     local player = Players.LocalPlayer
 
     local UI = {
-        Version = "0.5.1-dev.6.10.1-neon-fusion",
+        Version = "0.6.0-dev.6.11-halloween-suite",
         Pages = {},
         Nav = {},
         ModuleCards = {},
@@ -1455,6 +1455,302 @@ return function(ASTRAL)
         end
     end
 
+    -- Halloween 2026 suite. All game/Fsys work remains in the background
+    -- module; this panel only reads cached snapshots and changes local flags.
+    local halloween = ASTRAL.Modules:Get("halloween_2026")
+    if halloween and UI.Pages.Events then
+        local eventPanel = new("Frame", {
+            Name = "Halloween2026Suite",
+            Size = UDim2.new(1, 0, 0, 610),
+            BackgroundColor3 = C.panel,
+            BorderSizePixel = 0,
+            Parent = UI.Pages.Events,
+        })
+        corner(eventPanel, 10)
+        stroke(eventPanel, 0.55)
+
+        new("TextLabel", {
+            Text = "Halloween 2026  |  EVENT SUITE",
+            Position = UDim2.fromOffset(14, 10),
+            Size = UDim2.new(1, -28, 0, 22),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamSemibold,
+            TextSize = 14,
+            TextColor3 = C.text,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = eventPanel,
+        })
+
+        local statsLabel = new("TextLabel", {
+            Text = "Scanning Halloween state...",
+            Position = UDim2.fromOffset(14, 34),
+            Size = UDim2.new(1, -28, 0, 48),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.Gotham,
+            TextSize = 10,
+            TextColor3 = C.sub,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Top,
+            Parent = eventPanel,
+        })
+
+        local actionLabel = new("TextLabel", {
+            Text = "Idle",
+            Position = UDim2.fromOffset(14, 82),
+            Size = UDim2.new(1, -28, 0, 20),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamMedium,
+            TextSize = 10,
+            TextColor3 = C.green,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = eventPanel,
+        })
+
+        local function eventButton(textValue, x, y, width)
+            local button = new("TextButton", {
+                Text = textValue,
+                Position = UDim2.fromOffset(x, y),
+                Size = UDim2.fromOffset(width or 112, 28),
+                BackgroundColor3 = C.panel2,
+                BorderSizePixel = 0,
+                AutoButtonColor = false,
+                Font = Enum.Font.GothamBold,
+                TextSize = 10,
+                TextColor3 = C.sub,
+                Parent = eventPanel,
+            })
+            corner(button, 7)
+            return button
+        end
+
+        local ghostButton = eventButton("GHOST OFF", 14, 112, 112)
+        local cryptButton = eventButton("CRYPT OFF", 132, 112, 112)
+        local twigButton = eventButton("TWIGS OFF", 250, 112, 112)
+        local candyButton = eventButton("CANDY ON", 368, 112, 112)
+        local questButton = eventButton("QUESTS ON", 486, 112, 112)
+
+        local fastButton = eventButton("FAST SPIDER", 14, 150, 128)
+        local allButton = eventButton("ALL COFFINS", 148, 150, 128)
+        local twigModeButton = eventButton("TWIGS + SPIDER", 282, 150, 138)
+
+        new("TextLabel", {
+            Text = "CRYPT MODE",
+            Position = UDim2.fromOffset(432, 150),
+            Size = UDim2.new(1, -446, 0, 28),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamBold,
+            TextSize = 9,
+            TextColor3 = C.sub,
+            TextXAlignment = Enum.TextXAlignment.Right,
+            Parent = eventPanel,
+        })
+
+        ASTRAL.Runtime:Connect(ghostButton.MouseButton1Click, function()
+            halloween:SetFeature("ghost", not halloween.GhostEnabled)
+        end)
+        ASTRAL.Runtime:Connect(cryptButton.MouseButton1Click, function()
+            halloween:SetFeature("crypt", not halloween.CryptEnabled)
+        end)
+        ASTRAL.Runtime:Connect(twigButton.MouseButton1Click, function()
+            halloween:SetFeature("twigs", not halloween.TwigEnabled)
+        end)
+        ASTRAL.Runtime:Connect(candyButton.MouseButton1Click, function()
+            halloween:SetFeature("candy", not halloween.CandyEnabled)
+        end)
+        ASTRAL.Runtime:Connect(questButton.MouseButton1Click, function()
+            halloween:SetFeature("quests", not halloween.QuestEnabled)
+        end)
+        ASTRAL.Runtime:Connect(fastButton.MouseButton1Click, function()
+            halloween:SetCryptMode("Fast Spider")
+        end)
+        ASTRAL.Runtime:Connect(allButton.MouseButton1Click, function()
+            halloween:SetCryptMode("All")
+        end)
+        ASTRAL.Runtime:Connect(twigModeButton.MouseButton1Click, function()
+            halloween:SetCryptMode("Twigs + Spider")
+        end)
+
+        new("TextLabel", {
+            Text = "HALLOWEEN SHOP",
+            Position = UDim2.fromOffset(14, 194),
+            Size = UDim2.new(1, -28, 0, 20),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamSemibold,
+            TextSize = 11,
+            TextColor3 = C.text,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = eventPanel,
+        })
+
+        local amount = 1
+        local amountLabel = new("TextLabel", {
+            Text = "BUY x1",
+            Position = UDim2.new(1, -144, 0, 190),
+            Size = UDim2.fromOffset(68, 24),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamBold,
+            TextSize = 10,
+            TextColor3 = C.amber,
+            Parent = eventPanel,
+        })
+        local minusButton = eventButton("-", 0, 190, 28)
+        minusButton.Position = UDim2.new(1, -74, 0, 190)
+        local plusButton = eventButton("+", 0, 190, 28)
+        plusButton.Position = UDim2.new(1, -42, 0, 190)
+
+        ASTRAL.Runtime:Connect(minusButton.MouseButton1Click, function()
+            amount = math.max(1, amount - 1)
+            amountLabel.Text = "BUY x" .. tostring(amount)
+        end)
+        ASTRAL.Runtime:Connect(plusButton.MouseButton1Click, function()
+            amount = math.min(100, amount + 1)
+            amountLabel.Text = "BUY x" .. tostring(amount)
+        end)
+
+        local shopList = new("ScrollingFrame", {
+            Position = UDim2.fromOffset(14, 218),
+            Size = UDim2.new(1, -28, 0, 300),
+            CanvasSize = UDim2.new(),
+            AutomaticCanvasSize = Enum.AutomaticSize.Y,
+            ScrollBarThickness = 2,
+            ScrollBarImageColor3 = C.accent,
+            BackgroundColor3 = C.bg,
+            BorderSizePixel = 0,
+            Parent = eventPanel,
+        })
+        corner(shopList, 7)
+        new("UIPadding", {
+            PaddingTop = UDim.new(0, 6),
+            PaddingBottom = UDim.new(0, 6),
+            PaddingLeft = UDim.new(0, 6),
+            PaddingRight = UDim.new(0, 6),
+            Parent = shopList,
+        })
+        new("UIListLayout", {
+            Padding = UDim.new(0, 4),
+            SortOrder = Enum.SortOrder.LayoutOrder,
+            Parent = shopList,
+        })
+
+        local purchaseLabel = new("TextLabel", {
+            Text = "No purchases this session",
+            Position = UDim2.fromOffset(14, 528),
+            Size = UDim2.new(1, -28, 0, 28),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.Gotham,
+            TextSize = 10,
+            TextColor3 = C.sub,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = eventPanel,
+        })
+
+        local helpLabel = new("TextLabel", {
+            Text = "Ghost Gallery takes event priority; Twigs then Crypt run between rounds. Candy/quest claims are background-safe.",
+            Position = UDim2.fromOffset(14, 562),
+            Size = UDim2.new(1, -28, 0, 34),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.Gotham,
+            TextSize = 9,
+            TextWrapped = true,
+            TextColor3 = C.sub,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Top,
+            Parent = eventPanel,
+        })
+
+        local shopSignature = ""
+        local function rebuildShop(items)
+            for _, child in ipairs(shopList:GetChildren()) do
+                if child:IsA("TextButton") then child:Destroy() end
+            end
+            for _, item in ipairs(items) do
+                local row = new("TextButton", {
+                    Text = string.format(
+                        "%s   |   %s Candy   |   BUY",
+                        tostring(item.name or item.kind),
+                        tostring(item.price or "?")
+                    ),
+                    Size = UDim2.new(1, -2, 0, 28),
+                    BackgroundColor3 = C.panel2,
+                    BorderSizePixel = 0,
+                    AutoButtonColor = false,
+                    Font = Enum.Font.Gotham,
+                    TextSize = 10,
+                    TextColor3 = C.sub,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    Parent = shopList,
+                })
+                corner(row, 5)
+                new("UIPadding", {
+                    PaddingLeft = UDim.new(0, 8),
+                    Parent = row,
+                })
+                ASTRAL.Runtime:Connect(row.MouseButton1Click, function()
+                    halloween:QueuePurchase(item.kind, amount)
+                end)
+            end
+        end
+
+        local function fmtTime(seconds)
+            seconds = math.max(0, math.floor(tonumber(seconds) or 0))
+            return string.format(
+                "%02d:%02d:%02d",
+                math.floor(seconds / 3600),
+                math.floor((seconds % 3600) / 60),
+                seconds % 60
+            )
+        end
+
+        function UI:RefreshHalloween()
+            local status = halloween:GetStatus()
+            statsLabel.Text = string.format(
+                "Candy: %s (+%s)  |  %s/hr  |  %s/day  |  Keys: %d (+%d)\nPending pile: %s  |  Twigs: %d owned, %d/8 placed  |  Uptime: %s",
+                tostring(status.candy or 0),
+                tostring(status.earned or 0),
+                tostring(status.perHour or 0),
+                tostring(status.perDay or 0),
+                tonumber(status.keys or 0),
+                tonumber(status.keysLooted or 0),
+                tostring(status.pendingCandy or 0),
+                tonumber(status.twigsOwned or 0),
+                tonumber(status.twigsContributed or 0),
+                fmtTime(status.uptime)
+            )
+            actionLabel.Text = "Status: " .. tostring(status.message or "Idle")
+            actionLabel.TextColor3 = status.enabled and C.green or C.sub
+
+            local function stateButton(button, label, state)
+                button.Text = label .. (state and " ON" or " OFF")
+                button.TextColor3 = state and C.green or C.sub
+            end
+            stateButton(ghostButton, "GHOST", status.ghost)
+            stateButton(cryptButton, "CRYPT", status.crypt)
+            stateButton(twigButton, "TWIGS", status.twigs)
+            stateButton(candyButton, "CANDY", status.candyClaim)
+            stateButton(questButton, "QUESTS", status.quests)
+
+            fastButton.TextColor3 = status.cryptMode == "Fast Spider" and C.green or C.sub
+            allButton.TextColor3 = status.cryptMode == "All" and C.green or C.sub
+            twigModeButton.TextColor3 = status.cryptMode == "Twigs + Spider" and C.green or C.sub
+
+            purchaseLabel.Text = tostring(status.lastPurchase or "")
+            if status.error then
+                purchaseLabel.Text = purchaseLabel.Text .. "  |  Last error: " .. tostring(status.error)
+            end
+
+            local items = halloween:GetShop() or {}
+            local parts = {}
+            for _, item in ipairs(items) do
+                table.insert(parts, tostring(item.kind) .. ":" .. tostring(item.price))
+            end
+            local signature = table.concat(parts, "|")
+            if signature ~= shopSignature then
+                shopSignature = signature
+                rebuildShop(items)
+            end
+        end
+    end
+
     UI:Heading(
         "Diagnostics",
         "Diagnostics",
@@ -1574,6 +1870,11 @@ return function(ASTRAL)
         if self.RefreshNeonFactory then
             local ok, err = pcall(function() self:RefreshNeonFactory() end)
             if not ok then warn("[ASTRAL UI] Neon Factory refresh:", err) end
+        end
+
+        if self.RefreshHalloween then
+            local ok, err = pcall(function() self:RefreshHalloween() end)
+            if not ok then warn("[ASTRAL UI] Halloween refresh:", err) end
         end
     end
 
