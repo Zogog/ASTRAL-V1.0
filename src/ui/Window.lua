@@ -6,7 +6,7 @@ return function(ASTRAL)
     local player = Players.LocalPlayer
 
     local UI = {
-        Version = "0.2.1-dev.6.6.2-pet-queue-ui",
+        Version = "0.3.0-dev.6.8-pet-pens-v2",
         Pages = {},
         Nav = {},
         ModuleCards = {},
@@ -790,6 +790,197 @@ return function(ASTRAL)
         end
     end
 
+    -- Pet Pens v2 dashboard. All values come from PetPens.lua's cached
+    -- plain-Lua snapshots; this UI never calls ClientData/Fsys itself.
+    local petPens = ASTRAL.Modules:Get("pet_pens")
+    if petPens and UI.Pages["Pet Pens"] then
+        local pensPanel = new("Frame", {
+            Name = "PetPensV2",
+            Size = UDim2.new(1, 0, 0, 382),
+            BackgroundColor3 = C.panel,
+            BorderSizePixel = 0,
+            Parent = UI.Pages["Pet Pens"],
+        })
+        corner(pensPanel, 10)
+        stroke(pensPanel, 0.55)
+
+        new("TextLabel", {
+            Text = "Pet Pens v2",
+            Position = UDim2.fromOffset(14, 10),
+            Size = UDim2.new(0.5, -14, 0, 22),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamSemibold,
+            TextSize = 14,
+            TextColor3 = C.text,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = pensPanel,
+        })
+
+        local pensStatus = new("TextLabel", {
+            Text = "Waiting for first cycle...",
+            Position = UDim2.fromOffset(14, 34),
+            Size = UDim2.new(1, -128, 0, 32),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.Gotham,
+            TextSize = 10,
+            TextColor3 = C.sub,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Top,
+            Parent = pensPanel,
+        })
+
+        local claimButton = new("TextButton", {
+            Text = "CLAIM NOW",
+            AnchorPoint = Vector2.new(1, 0),
+            Position = UDim2.new(1, -14, 0, 16),
+            Size = UDim2.fromOffset(100, 30),
+            BackgroundColor3 = C.panel2,
+            BorderSizePixel = 0,
+            AutoButtonColor = false,
+            Font = Enum.Font.GothamBold,
+            TextSize = 10,
+            TextColor3 = C.sub,
+            Parent = pensPanel,
+        })
+        corner(claimButton, 7)
+
+        local slotRefs = {}
+        for index = 1, 4 do
+            local y = 76 + (index - 1) * 72
+            local frame = new("Frame", {
+                Name = "PenSlot" .. tostring(index),
+                Position = UDim2.fromOffset(14, y),
+                Size = UDim2.new(1, -28, 0, 62),
+                BackgroundColor3 = C.bg,
+                BorderSizePixel = 0,
+                Parent = pensPanel,
+            })
+            corner(frame, 7)
+
+            local title = new("TextLabel", {
+                Text = "PEN " .. tostring(index) .. "  |  Empty",
+                Position = UDim2.fromOffset(10, 6),
+                Size = UDim2.new(1, -20, 0, 20),
+                BackgroundTransparency = 1,
+                Font = Enum.Font.GothamSemibold,
+                TextSize = 11,
+                TextColor3 = C.text,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = frame,
+            })
+
+            local detail = new("TextLabel", {
+                Text = "Waiting for assignment data",
+                Position = UDim2.fromOffset(10, 28),
+                Size = UDim2.new(1, -20, 0, 27),
+                BackgroundTransparency = 1,
+                Font = Enum.Font.Gotham,
+                TextSize = 10,
+                TextColor3 = C.sub,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextYAlignment = Enum.TextYAlignment.Top,
+                Parent = frame,
+            })
+
+            slotRefs[index] = {Title = title, Detail = detail}
+        end
+
+        local function duration(seconds)
+            if seconds == nil then return "measuring..." end
+            seconds = math.max(0, math.floor(seconds + 0.5))
+            local hours = math.floor(seconds / 3600)
+            local minutes = math.floor((seconds % 3600) / 60)
+            if hours > 0 then
+                return string.format("%dh %02dm", hours, minutes)
+            end
+            if minutes > 0 then
+                return string.format("%dm", minutes)
+            end
+            return "<1m"
+        end
+
+        ASTRAL.Runtime:Connect(claimButton.MouseButton1Click, function()
+            local ok, reason = petPens:RequestCycle()
+            if not ok then
+                warn("[ASTRAL UI] Pet Pens claim:", reason)
+            end
+        end)
+
+        function UI:RefreshPetPens()
+            local now = os.clock()
+            if self._PetPensRefreshAt and now < self._PetPensRefreshAt then
+                return
+            end
+            self._PetPensRefreshAt = now + 0.35
+
+            local statusInfo = petPens:GetStatus()
+            local slots = petPens:GetSlots()
+
+            local cycleText = statusInfo.enabled
+                and ("Next claim: " .. duration(statusInfo.nextCycleIn))
+                or "Auto management off"
+            pensStatus.Text = string.format(
+                "%d/%d occupied  |  %s\n%s",
+                statusInfo.occupied or 0,
+                statusInfo.capacity or 4,
+                cycleText,
+                tostring(statusInfo.summary or statusInfo.message or "")
+            )
+
+            claimButton.TextColor3 = statusInfo.enabled
+                and not statusInfo.busy and C.green or C.sub
+            claimButton.Text = statusInfo.busy and "WORKING..." or "CLAIM NOW"
+
+            for index = 1, 4 do
+                local refs = slotRefs[index]
+                local slot = slots[index]
+                if slot then
+                    local stage = slot.isFullGrown
+                        and "Full Grown"
+                        or ("Age " .. tostring(slot.age or "?"))
+                    local stageProgress = ""
+                    if slot.targetXP and slot.targetXP > 0 and not slot.isFullGrown then
+                        stageProgress = string.format(
+                            " | %.0f%% (%s/%s XP)",
+                            math.clamp((slot.xp or 0) / slot.targetXP * 100, 0, 100),
+                            tostring(slot.xp or 0),
+                            tostring(slot.targetXP)
+                        )
+                    end
+
+                    refs.Title.Text = string.format(
+                        "PEN %d  |  %s  |  %s%s",
+                        index,
+                        tostring(slot.name or "Pet"),
+                        stage,
+                        stageProgress
+                    )
+
+                    if slot.isFullGrown then
+                        refs.Detail.Text = "Ready for automatic replacement on the next cycle"
+                        refs.Detail.TextColor3 = C.green
+                    else
+                        local ratePrefix = slot.rateMeasured and "" or "~"
+                        local rateSuffix = slot.rateMeasured and " measured" or " baseline"
+                        refs.Detail.Text = string.format(
+                            "%s XP remaining  |  %s%s XP/hr%s  |  Est. Full Grown: %s",
+                            tostring(slot.remainingXP or "?"),
+                            ratePrefix,
+                            tostring(slot.xpPerHour or "?"),
+                            rateSuffix,
+                            duration(slot.etaSeconds)
+                        )
+                        refs.Detail.TextColor3 = C.sub
+                    end
+                else
+                    refs.Title.Text = "PEN " .. tostring(index) .. "  |  Empty"
+                    refs.Detail.Text = "ASTRAL will fill this slot with an eligible growable pet."
+                    refs.Detail.TextColor3 = C.sub
+                end
+            end
+        end
+    end
+
     UI:Heading(
         "Diagnostics",
         "Diagnostics",
@@ -894,6 +1085,11 @@ return function(ASTRAL)
         if self.RefreshPetQueue then
             local ok, err = pcall(function() self:RefreshPetQueue() end)
             if not ok then warn("[ASTRAL UI] Pet Queue refresh:", err) end
+        end
+
+        if self.RefreshPetPens then
+            local ok, err = pcall(function() self:RefreshPetPens() end)
+            if not ok then warn("[ASTRAL UI] Pet Pens refresh:", err) end
         end
     end
 
