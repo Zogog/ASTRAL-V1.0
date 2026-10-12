@@ -15,7 +15,7 @@ return function(ASTRAL)
         Name = "Pet Pens",
         Page = "Pet Pens",
         Description = "Claim idle progression, replace Full Grown pets and keep Pet Pens filled.",
-        Version = "0.2.0-dev.6.8-ui-eta",
+        Version = "0.2.1-dev.6.9-eggs-coordination",
         Implemented = true,
         Enabled = false,
         Busy = false,
@@ -292,6 +292,12 @@ return function(ASTRAL)
         local queue = ASTRAL.Modules:Get("pet_queue")
         if queue and queue.Busy then
             self.LastMessage = "Waiting for Pet Queue"
+            return false
+        end
+
+        local eggs = ASTRAL.Modules:Get("eggs")
+        if eggs and eggs.Busy then
+            self.LastMessage = "Waiting for Egg Manager"
             return false
         end
 
