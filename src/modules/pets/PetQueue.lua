@@ -9,7 +9,7 @@ return function(ASTRAL)
         Name = "Pet Queue",
         Page = "Pets",
         Description = "Grow All or build a manual pet queue; switch after Full Grown.",
-        Version = "0.2.5-dev.6.9.3-normal-first",
+        Version = "0.3.0-dev.6.10.2-neon-targets",
         Implemented = true,
         Enabled = false,
         Busy = false,
@@ -40,6 +40,15 @@ return function(ASTRAL)
             currentUnique = current and current.unique or nil,
         })
         local candidates = eligible
+
+        -- In Grow All, an enabled Neon Factory may promote its selected
+        -- species/variant targets ahead of generic progression.
+        if self.Mode == "grow_all" then
+            local factory = ASTRAL.Modules:Get("neon_factory")
+            if factory and factory.Enabled and factory.PrioritizeGrowthCandidates then
+                candidates = factory:PrioritizeGrowthCandidates(eligible)
+            end
+        end
 
         if self.Mode == "manual" then
             local byUnique = {}
@@ -263,20 +272,39 @@ return function(ASTRAL)
         -- Mega pets while a lower-tier variant is available. Those variants
         -- are reserved for the future Neon Factory unless normals are exhausted.
         if current and not current.isEgg and current.age ~= nil and current.age < 6 then
-            local currentRank = current.isMega and 2 or (current.isNeon and 1 or 0)
             local best = candidates[1]
-            local bestRank = best and (best.isMega and 2 or (best.isNeon and 1 or 0)) or currentRank
-            if self.Mode ~= "grow_all" or bestRank >= currentRank then
-                self.LastMessage = "Growing " .. current.name
-                return false
+            local factory = ASTRAL.Modules:Get("neon_factory")
+            local currentTargetRank = factory and factory.Enabled
+                and factory.GetGrowthPriority and select(1, factory:GetGrowthPriority(current)) or nil
+            local bestTargetRank = best and factory and factory.Enabled
+                and factory.GetGrowthPriority and select(1, factory:GetGrowthPriority(best)) or nil
+
+            if self.Mode == "grow_all" and bestTargetRank ~= nil then
+                if currentTargetRank ~= nil and currentTargetRank <= bestTargetRank then
+                    self.LastMessage = "Growing Neon Factory target " .. current.name
+                    return false
+                end
+                self.LastMessage = string.format(
+                    "Neon Factory target -> switching %s to %s",
+                    tostring(current.name),
+                    tostring(best.name)
+                )
+                log(self.LastMessage)
+            else
+                local currentRank = current.isMega and 2 or (current.isNeon and 1 or 0)
+                local bestRank = best and (best.isMega and 2 or (best.isNeon and 1 or 0)) or currentRank
+                if self.Mode ~= "grow_all" or bestRank >= currentRank then
+                    self.LastMessage = "Growing " .. current.name
+                    return false
+                end
+                self.LastMessage = string.format(
+                    "Preserving %s %s; switching to %s pet",
+                    tostring(current.variant or "variant"),
+                    tostring(current.name),
+                    bestRank == 0 and "normal" or "lower-tier"
+                )
+                log(self.LastMessage)
             end
-            self.LastMessage = string.format(
-                "Preserving %s %s; switching to %s pet",
-                tostring(current.variant or "variant"),
-                tostring(current.name),
-                bestRank == 0 and "normal" or "lower-tier"
-            )
-            log(self.LastMessage)
         end
 
         -- An equipped egg only blocks the queue while Egg Manager owns it.
