@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.5-modular",
-    Build = "18 modular core pet ailments (experimental)",
+    Version = "1.0.0-dev.5.1-furniture",
+    Build = "18 modular core pet ailments + automatic furniture discovery",
 
     Repository = {
         Owner = "Zogog",
@@ -49,6 +49,7 @@ local MANIFEST = {
     { id = "runtime",        path = "src/core/Runtime.lua",        required = true  },
     { id = "scheduler",      path = "src/core/Scheduler.lua",      required = true  },
     { id = "game_api",       path = "src/core/GameAPI.lua",        required = true  },
+    { id = "furniture_api",  path = "src/core/FurnitureAPI.lua",   required = true  },
     { id = "feeding_api",     path = "src/core/FeedingAPI.lua",       required = true  },
     { id = "feeding_support", path = "src/core/FeedingSupport.lua",   required = true  },
     { id = "ailment_support", path = "src/core/AilmentSupport.lua",   required = true  },
