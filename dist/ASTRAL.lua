@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.6.8 — Pet Pens v2 ETA
+    ASTRAL 1.0.0-dev.6.8.1 — Bored Playground hotfix
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6.8-pet-pens-v2",
-    Build = "Pet Pens v2 UI + Full Grown ETA + measured XP rate",
+    Version = "1.0.0-dev.6.8.1-bored-hotfix",
+    Build = "Pet Pens v2 + verified Playground Bored handler",
 
     Repository = {
         Owner = "Zogog",
