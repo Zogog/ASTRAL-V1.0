@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.3 — First Automation
+    ASTRAL 1.0.0-dev.3.1 — First Automation
 
     This is the only file the executor needs to load directly.
     Feature/core/UI modules are fetched independently from this repository.
@@ -10,8 +10,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.3",
-    Build = "First Automation",
+    Version = "1.0.0-dev.3.1",
+    Build = "First Automation / Cache Fix",
 
     Repository = {
         Owner = "Zogog",
@@ -68,10 +68,17 @@ local MANIFEST = {
 }
 
 local function fetch(path)
-    local url = BASE_URL .. path .. "?astral=" .. ASTRAL.Version
     local lastError
 
     for attempt = 1, 3 do
+        -- A fresh query string on every request bypasses URL-based caches.
+        -- This does not override an uncommitted GitHub change or replication delay.
+        local nonce = tostring(os.time()) .. "-" .. tostring(math.random(100000, 999999))
+        local url = BASE_URL .. path
+            .. "?astral=" .. ASTRAL.Version
+            .. "&fresh=" .. nonce
+            .. "-" .. tostring(attempt)
+
         local ok, result = pcall(function()
             return game:HttpGet(url)
         end)
