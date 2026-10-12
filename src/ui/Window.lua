@@ -381,10 +381,62 @@ return function(ASTRAL)
         }
     end
 
+    function UI:ModuleCard(page, module)
+        local card = self:Card(
+            page,
+            module.Name,
+            module.Description,
+            module.Implemented and "AVAILABLE" or "NOT IMPLEMENTED"
+        )
+
+        if not module.Implemented then
+            return card
+        end
+
+        card.Body.Size = UDim2.new(1, -150, 0, 34)
+
+        local toggle = new("TextButton", {
+            Name = "Toggle",
+            Text = "OFF",
+            AnchorPoint = Vector2.new(1, 1),
+            Position = UDim2.new(1, -12, 1, -12),
+            Size = UDim2.fromOffset(92, 28),
+            BackgroundColor3 = C.panel2,
+            BorderSizePixel = 0,
+            AutoButtonColor = false,
+            Font = Enum.Font.GothamBold,
+            TextSize = 11,
+            TextColor3 = C.sub,
+            Parent = card.Frame,
+        })
+        corner(toggle, 7)
+
+        self.ModuleCards[module.Id] = {
+            Module = module,
+            Toggle = toggle,
+            Body = card.Body,
+        }
+
+        ASTRAL.Runtime:Connect(toggle.MouseButton1Click, function()
+            local ok, reason = ASTRAL.Modules:SetEnabled(
+                module.Id,
+                not module.Enabled
+            )
+
+            if not ok then
+                warn("[ASTRAL UI] Could not toggle", module.Id, reason)
+            end
+
+            UI:Refresh()
+        end)
+
+        return card
+    end
+
     UI:Heading(
         "Dashboard",
         "Dashboard",
-        "ASTRAL 1.0 modular rebuild - architecture first, automation second."
+        "ASTRAL 1.0 modular rebuild - first verified automation migration."
     )
 
     local runtimeCard = UI:Card(
@@ -419,12 +471,7 @@ return function(ASTRAL)
     for _, id in ipairs(ASTRAL.Modules.Order) do
         local module = ASTRAL.Modules:Get(id)
         if UI.Pages[module.Page] then
-            UI:Card(
-                module.Page,
-                module.Name,
-                module.Description,
-                module.Implemented and "AVAILABLE" or "NOT IMPLEMENTED"
-            )
+            UI:ModuleCard(module.Page, module)
         end
     end
 
@@ -477,7 +524,7 @@ return function(ASTRAL)
     UI:Card(
         "Settings",
         "Gameplay automation",
-        "No gameplay automation is included in dev.2.",
+        "Only the verified Play ailment is migrated in dev.3. All other gameplay modules remain disabled.",
         "DISABLED"
     )
 
@@ -510,6 +557,18 @@ return function(ASTRAL)
             end)(),
             ASTRAL.State:Uptime()
         )
+
+        for id, refs in pairs(self.ModuleCards) do
+            local module = refs.Module
+            local statusInfo = module.GetStatus and module:GetStatus() or nil
+
+            refs.Toggle.Text = module.Enabled and "ON" or "OFF"
+            refs.Toggle.TextColor3 = module.Enabled and C.green or C.sub
+
+            if statusInfo and statusInfo.message then
+                refs.Body.Text = module.Description .. "\nStatus: " .. tostring(statusInfo.message)
+            end
+        end
 
         UI.StatusLabel.Text =
             ASTRAL.State.Runtime .. "  |  " .. ASTRAL.Scheduler:Status()
