@@ -6,7 +6,7 @@ return function(ASTRAL)
     local player = Players.LocalPlayer
 
     local UI = {
-        Version = "0.5.0-dev.6.10-neon-planner",
+        Version = "0.5.1-dev.6.10.1-neon-fusion",
         Pages = {},
         Nav = {},
         ModuleCards = {},
@@ -1031,7 +1031,7 @@ return function(ASTRAL)
         local megaButton = viewButton("CLOSEST MEGA", 250)
 
         new("TextLabel", {
-            Text = "N/M toggles mark species you want the factory to produce. Planner v1 does not fuse automatically yet.",
+            Text = "N/M toggles select production targets. When Neon Factory is ON, ready selected pets fuse automatically.",
             Position = UDim2.fromOffset(376, 74),
             Size = UDim2.new(1, -390, 0, 28),
             BackgroundTransparency = 1,
@@ -1203,11 +1203,12 @@ return function(ASTRAL)
 
             local info = neonFactory:GetStatus()
             neonStatus.Text = string.format(
-                "%d species scanned  |  %d ready now  |  %d Neon targets  |  %d Mega targets\n%s",
+                "%d species scanned  |  %d ready now  |  %d Neon targets  |  %d Mega targets  |  %d fused\n%s",
                 info.species or 0,
                 info.ready or 0,
                 info.neonTargets or 0,
                 info.megaTargets or 0,
+                info.fusionCount or 0,
                 tostring(info.message or "")
             )
             neonStatus.TextColor3 = info.busy and C.amber or C.sub
