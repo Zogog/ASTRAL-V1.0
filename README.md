@@ -1,3 +1,4 @@
+[README.md](https://github.com/user-attachments/files/33317702/README.md)
 # ASTRAL 1.0 — Modular Rebuild
 
 ## 1.0.0-dev.5-modular — 18 core pet ailments
@@ -47,3 +48,9 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/Zogog/ASTRAL-V1.0/mai
 ### First test
 
 On boot, confirm all required modules load and all 18 ailment registrations appear without a compile/initialisation failure. Then enable Pet Autofarm and send the full console output for any ailment that runs. Test results should be used to fix handlers individually without touching already-working modules.
+
+## dev.5.1 furniture discovery
+
+Furniture-based needs now use `src/core/FurnitureAPI.lua`. It lazily probes the local player's own house slots through `HousingAPI/GetFurnitureWithinHouse`, caches valid furniture records, and stops once the requested furniture is found. An explicit `ASTRAL.Config.HouseSlot` is still honoured first but is no longer required.
+
+Shared by Sleepy, Dirty, Toilet, Bored, Hungry and Thirsty. No house teleport is required for discovery.
