@@ -12,7 +12,7 @@ return function(ASTRAL)
     local SharedConstants = load("SharedConstants")
 
     local PetAPI = {
-        Version = "0.1.0-dev.6",
+        Version = "0.1.1-dev.6.3",
     }
 
     local function properties(item)
@@ -178,6 +178,43 @@ return function(ASTRAL)
             task.wait(0.2)
         end
         return false, "Equip call returned but new pet was not confirmed"
+    end
+
+    -- Recovery for a pet left in a stale furniture interaction. The player
+    -- manually verified that unequipping and re-equipping the same pet allows
+    -- a rejected Sleepy interaction to progress. Pet unequip remote arguments
+    -- are not yet captured independently; verify the state transition.
+    function PetAPI:ResetFurnitureInteraction(expectedUnique)
+        local Game = ASTRAL.Game
+        if not expectedUnique or Game:GetCurrentPetUnique() ~= expectedUnique then
+            return false, "Equipped pet changed before reset"
+        end
+        local unequip = Game:GetRemote("ToolAPI/Unequip")
+        if not unequip then return false, "ToolAPI/Unequip unavailable" end
+
+        local ok, err = pcall(function()
+            unequip:InvokeServer(expectedUnique)
+        end)
+        if not ok then return false, "Pet unequip remote failed: " .. tostring(err) end
+
+        local deadline = os.clock() + 2
+        local unequipped = false
+        while os.clock() < deadline do
+            if Game:GetCurrentPetUnique() ~= expectedUnique then
+                unequipped = true
+                break
+            end
+            task.wait(0.15)
+        end
+        if not unequipped then
+            return false, "Pet unequip not confirmed; equip skipped"
+        end
+
+        local equipped, reason = self:Equip(expectedUnique)
+        if not equipped then
+            return false, "Pet re-equip failed: " .. tostring(reason)
+        end
+        return true
     end
 
     ASTRAL.Pets = PetAPI
