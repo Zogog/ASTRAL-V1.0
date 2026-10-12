@@ -11,7 +11,7 @@ return function(ASTRAL)
 
     local GameAPI = {
         Ready = true,
-        Version = "0.1.1-dev.6.5-ds-play",
+        Version = "0.1.2-dev.6.5.1-ds-wrapper",
         Remotes = {},
     }
 
@@ -60,6 +60,37 @@ return function(ASTRAL)
     function GameAPI:GetCurrentPetUnique()
         local wrapper = self:GetEquippedPetWrappers()[1]
         return wrapper and wrapper.pet_unique
+    end
+
+    function GameAPI:GetPetCharWrapper(petUnique)
+        petUnique = petUnique or self:GetCurrentPetUnique()
+        if not petUnique then return nil end
+
+        -- D&S 4.1.3 sources the physical pet model from ClientData's
+        -- pet_char_wrappers, not from the EquippedPets helper.
+        local ok, wrappers = pcall(function()
+            local data = ClientData.get_data and ClientData.get_data() or nil
+            return (type(data) == "table" and data.pet_char_wrappers)
+                or ClientData.get("pet_char_wrappers")
+        end)
+
+        if ok and type(wrappers) == "table" then
+            for _, wrapper in pairs(wrappers) do
+                if type(wrapper) == "table"
+                    and wrapper.pet_unique == petUnique
+                    and typeof(wrapper.char) == "Instance"
+                    and wrapper.char.Parent then
+                    return wrapper
+                end
+            end
+        end
+
+        return nil
+    end
+
+    function GameAPI:GetPetCharacter(petUnique)
+        local wrapper = self:GetPetCharWrapper(petUnique)
+        return wrapper and wrapper.char or nil
     end
 
     function GameAPI:GetInventory()
