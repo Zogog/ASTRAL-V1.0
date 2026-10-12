@@ -25,7 +25,7 @@ return function(ASTRAL)
         Name = "Halloween 2026",
         Page = "Events",
         Description = "Ghost Gallery, Crypt, Twigs, Candy Corn, quests, event shop and session statistics.",
-        Version = "0.1.2-dev.6.11.2-event-location-guard",
+        Version = "0.1.3-dev.6.11.3-twig-diagnostics",
         Implemented = true,
         Enabled = false,
         Busy = false,
@@ -66,6 +66,7 @@ return function(ASTRAL)
         LastCandyClaim = 0,
         LastTwigAttempt = 0,
         TwigRetryAt = 0,
+        TwigRetryReason = nil,
     }
 
     local function log(message)
@@ -608,7 +609,8 @@ return function(ASTRAL)
             return false
         end
         if os.clock() < Halloween.TwigRetryAt then
-            Halloween.CurrentAction = "Twigs: waiting before retry"
+            Halloween.CurrentAction = "Twigs: retry paused - "
+                .. tostring(Halloween.TwigRetryReason or "unknown reason")
             return false
         end
 
@@ -620,10 +622,15 @@ return function(ASTRAL)
             Halloween.CurrentAction = "Twigs: entering Haunted Hotel for pigeon nest"
             local ok, err = enterInterior("HauntedHotel", "MainDoor", {})
             if not ok then
-                Halloween.LastError = "Twig hotel entry: " .. tostring(err)
+                local reported = tostring(getLocation())
+                Halloween.TwigRetryReason = "hotel entry not confirmed; location=" .. reported
+                Halloween.LastError = "Twig: " .. Halloween.TwigRetryReason
                 Halloween.TwigRetryAt = os.clock() + 10
+                log(Halloween.TwigRetryReason .. " | " .. tostring(err))
                 return false
             end
+
+            log("Twig Hotel entry confirmed; location=" .. tostring(getLocation()))
 
             -- Match the D&S nest setup once on entry. Never stack this offset
             -- on repeated worker passes while already inside the Hotel.
@@ -638,8 +645,29 @@ return function(ASTRAL)
 
         local contribute = getNet("Halloween2026/JacobeanPigeonNestContributeTwig")
         if not contribute then
-            Halloween.CurrentAction = "Twigs: contribution remote unavailable"
+            local halloweenNames = {}
+            if NewNet then
+                for _, child in ipairs(NewNet:GetChildren()) do
+                    local name = tostring(child.Name)
+                    if string.find(string.lower(name), "halloween", 1, true)
+                        or string.find(string.lower(name), "pigeon", 1, true)
+                        or string.find(string.lower(name), "twig", 1, true) then
+                        table.insert(halloweenNames, name)
+                    end
+                end
+            end
+            table.sort(halloweenNames)
+            Halloween.TwigRetryReason = "contribution remote unavailable"
+            Halloween.LastError = "Twig: " .. Halloween.TwigRetryReason
+            Halloween.CurrentAction = "Twigs: " .. Halloween.TwigRetryReason
             Halloween.TwigRetryAt = os.clock() + 15
+            log(
+                Halloween.TwigRetryReason
+                .. " | location=" .. tostring(getLocation())
+                .. " | matching net children=["
+                .. table.concat(halloweenNames, ",")
+                .. "]"
+            )
             return false
         end
 
@@ -654,16 +682,21 @@ return function(ASTRAL)
                 return contribute:InvokeServer({unique = unique})
             end)
             if not callOk then
-                Halloween.LastError = "Twig remote: " .. tostring(result)
-                log("Twig contribution remote error: " .. tostring(result))
+                Halloween.TwigRetryReason = "remote error: " .. tostring(result)
+                Halloween.LastError = "Twig: " .. Halloween.TwigRetryReason
+                log("Twig contribution " .. Halloween.TwigRetryReason)
                 Halloween.TwigRetryAt = os.clock() + 15
                 break
             end
 
             if type(result) == "table" and result.ok == false then
                 local reason = tostring(result.reason or "unknown")
-                Halloween.LastError = "Twig contribution: " .. reason
-                log("Twig contribution stopped: " .. reason)
+                Halloween.TwigRetryReason = "server rejected: " .. reason
+                Halloween.LastError = "Twig: " .. Halloween.TwigRetryReason
+                log(
+                    "Twig contribution stopped: " .. reason
+                    .. " | location=" .. tostring(getLocation())
+                )
                 Halloween.TwigRetryAt = os.clock() + (reason == "too_far" and 20 or 10)
                 break
             end
@@ -674,6 +707,7 @@ return function(ASTRAL)
             else
                 Halloween.TwigsContributed += 1
             end
+            Halloween.TwigRetryReason = nil
             log("Placed Twig: " .. tostring(Halloween.TwigsContributed) .. "/8")
             task.wait(1)
         end
@@ -692,9 +726,14 @@ return function(ASTRAL)
             Halloween.CurrentAction = "Twigs: Jacobean Pigeon unlocked"
             log("Jacobean Pigeon twig requirement complete; Twig automation disabled")
         elseif Halloween.TwigsContributed <= before then
+            Halloween.TwigRetryReason = Halloween.TwigRetryReason or "authoritative nest stayed at "
+                .. tostring(before) .. "/8"
             Halloween.TwigRetryAt = math.max(Halloween.TwigRetryAt, os.clock() + 15)
-            Halloween.CurrentAction = "Twigs: no progress; retry paused"
-            log("Twig attempt made no progress (" .. tostring(before) .. "/8); pausing retries")
+            Halloween.CurrentAction = "Twigs: retry paused - " .. Halloween.TwigRetryReason
+            log(
+                "Twig attempt made no progress (" .. tostring(before)
+                .. "/8) | " .. tostring(Halloween.TwigRetryReason)
+            )
         end
         return true
     end
