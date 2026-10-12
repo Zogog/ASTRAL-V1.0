@@ -6,6 +6,7 @@ return function(ASTRAL)
     local player = Players.LocalPlayer
 
     local UI = {
+        Version = "0.1.1-dev.6.1-ui-safe",
         Pages = {},
         Nav = {},
         ModuleCards = {},
