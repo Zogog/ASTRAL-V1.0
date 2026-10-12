@@ -280,7 +280,12 @@ return function(ASTRAL)
                 and factory.GetGrowthPriority and select(1, factory:GetGrowthPriority(best)) or nil
 
             if self.Mode == "grow_all" and bestTargetRank ~= nil then
-                if currentTargetRank ~= nil and currentTargetRank <= bestTargetRank then
+                local keepCurrent = false
+                if currentTargetRank ~= nil and factory.PrioritizeGrowthCandidates then
+                    local pair = factory:PrioritizeGrowthCandidates({current, best})
+                    keepCurrent = pair[1] and pair[1].unique == current.unique
+                end
+                if keepCurrent then
                     self.LastMessage = "Growing Neon Factory target " .. current.name
                     return false
                 end
