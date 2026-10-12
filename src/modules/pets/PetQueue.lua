@@ -9,7 +9,7 @@ return function(ASTRAL)
         Name = "Pet Queue",
         Page = "Pets",
         Description = "Grow All or build a manual pet queue; switch after Full Grown.",
-        Version = "0.2.2-dev.6.6.2-ui-cache",
+        Version = "0.2.3-dev.6.7-pens-coordination",
         Implemented = true,
         Enabled = false,
         Busy = false,
@@ -238,6 +238,12 @@ return function(ASTRAL)
         local farm = ASTRAL.Modules:Get("pet_farm")
         if farm and farm.Busy then
             self.LastMessage = "Waiting for current ailment"
+            return false
+        end
+
+        local pens = ASTRAL.Modules:Get("pet_pens")
+        if pens and pens.Busy then
+            self.LastMessage = "Waiting for Pet Pens"
             return false
         end
 
