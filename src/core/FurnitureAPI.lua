@@ -203,10 +203,13 @@ return function(ASTRAL)
     end
 
     function Furniture:GetMatches(ids)
-        local rank = {}
+        local rank, nextRank = {}, 0
         for _, id in ipairs(ids or {}) do
             local key = normalise(id)
-            if key ~= "" and not rank[key] then rank[key] = #rank + 1 end
+            if key ~= "" and not rank[key] then
+                nextRank += 1
+                rank[key] = nextRank
+            end
         end
 
         -- Preserve duplicate owned furniture instances. Find() intentionally
