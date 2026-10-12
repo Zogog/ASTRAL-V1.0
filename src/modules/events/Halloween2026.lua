@@ -25,7 +25,7 @@ return function(ASTRAL)
         Name = "Halloween 2026",
         Page = "Events",
         Description = "Ghost Gallery, Crypt, Twigs, Candy Corn, quests, event shop and session statistics.",
-        Version = "0.1.1-dev.6.11.1-twig-guard",
+        Version = "0.1.2-dev.6.11.2-event-location-guard",
         Implemented = true,
         Enabled = false,
         Busy = false,
@@ -707,10 +707,16 @@ return function(ASTRAL)
         if os.clock() - Halloween.LastCandyClaim < 15 then return false end
 
         local location = getLocation()
-        if location == "ManorMinigameInterior"
+        -- Candy collection must never pull ASTRAL out of another Halloween
+        -- activity. In dev.6.11.1 HauntedHotel was missing here, causing a
+        -- loop: Twig worker -> HauntedHotel -> Candy claim -> MainMap -> repeat.
+        local protectedHalloweenInterior = location == "ManorMinigameInterior"
             or location == "HauntedManor"
+            or location == "HauntedHotel"
             or location == "TheCrypt"
-            or string.find(location or "", "Minigame") then
+            or string.find(location or "", "Minigame") ~= nil
+
+        if protectedHalloweenInterior then
             return false
         end
 
