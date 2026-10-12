@@ -7,7 +7,7 @@ return function(ASTRAL)
     local ClientData = require(ReplicatedStorage:WaitForChild("Fsys")).load("ClientData")
 
     local Furniture = {
-        Version = "0.1.0-dev.5.1",
+        Version = "0.1.1-dev.5.1",
         MaxAutoSlot = 20,
         Slots = {},
         Scanned = {},
@@ -107,21 +107,55 @@ return function(ASTRAL)
     end
 
     function Furniture:Find(ids, forceRefresh)
-        local wanted = {}
-        for _, id in ipairs(ids or {}) do wanted[normalise(id)] = true end
-        if next(wanted) == nil then return nil, "No furniture ids requested" end
+        -- ids is an ordered preference list. Search by furniture priority
+        -- across discovered house slots, rather than letting an early slot's
+        -- fallback beat a preferred item in a later slot.
+        local ordered, rank = {}, {}
+        for _, id in ipairs(ids or {}) do
+            local key = normalise(id)
+            if key ~= "" and not rank[key] then
+                table.insert(ordered, key)
+                rank[key] = #ordered
+            end
+        end
+        if #ordered == 0 then return nil, "No furniture ids requested" end
 
-        for _, slot in ipairs(self:CandidateSlots()) do
-            local snapshot = self:ScanSlot(slot, forceRefresh == true)
-            if snapshot then
-                for id in pairs(wanted) do
-                    local record = snapshot.byId[id]
-                    if record then
-                        print(string.format("[ASTRAL FURNITURE] matched %s in house slot %d -> %s", record.id, slot, record.unique))
-                        return record
-                    end
+        if forceRefresh == true then self:Refresh() end
+
+        local function bestKnown()
+            for _, id in ipairs(ordered) do
+                for _, slot in ipairs(self.DiscoveredSlots) do
+                    local snapshot = self.Slots[slot]
+                    local record = snapshot and snapshot.byId[id]
+                    if record then return record, rank[id] end
                 end
             end
+            return nil
+        end
+
+        local best, bestRank = bestKnown()
+        if bestRank == 1 then
+            print(string.format("[ASTRAL FURNITURE] matched %s in house slot %d -> %s", best.id, best.slot, best.unique))
+            return best
+        end
+
+        -- Keep any fallback already found, but continue probing until the
+        -- highest-priority requested furniture is found or all candidates
+        -- have been checked.
+        for _, slot in ipairs(self:CandidateSlots()) do
+            if not self.Scanned[slot] then
+                self:ScanSlot(slot, false)
+                local candidate, candidateRank = bestKnown()
+                if candidate and (not bestRank or candidateRank < bestRank) then
+                    best, bestRank = candidate, candidateRank
+                end
+                if bestRank == 1 then break end
+            end
+        end
+
+        if best then
+            print(string.format("[ASTRAL FURNITURE] matched %s in house slot %d -> %s", best.id, best.slot, best.unique))
+            return best
         end
         return nil, "Required furniture not found: " .. table.concat(ids, ", ")
     end
