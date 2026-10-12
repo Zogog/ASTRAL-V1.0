@@ -15,7 +15,7 @@ return function(ASTRAL)
         Name = "Pet Pens",
         Page = "Pet Pens",
         Description = "Claim idle progression, replace Full Grown pets and keep Pet Pens filled.",
-        Version = "0.2.1-dev.6.9-eggs-coordination",
+        Version = "0.3.0-dev.6.10.2-neon-targets",
         Implemented = true,
         Enabled = false,
         Busy = false,
@@ -338,6 +338,10 @@ return function(ASTRAL)
             local candidates = Pets:GetGrowablePets({
                 currentUnique = current and current.unique or nil,
             })
+            local factory = ASTRAL.Modules:Get("neon_factory")
+            if factory and factory.Enabled and factory.PrioritizeGrowthCandidates then
+                candidates = factory:PrioritizeGrowthCandidates(candidates)
+            end
             local attempted = {}
             local added = 0
             local index = 1
