@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.6.9 — Egg Manager v1
+    ASTRAL 1.0.0-dev.6.9.1 — Preferred Autofarm House
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
