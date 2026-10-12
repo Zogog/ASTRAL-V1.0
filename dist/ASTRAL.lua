@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6.9.1-preferred-house",
-    Build = "Preferred Autofarm house + bowl discovery + Egg Manager v1",
+    Version = "1.0.0-dev.6.9.2-unattended",
+    Build = "Anti-AFK + preferred Autofarm house + Egg Manager v1",
 
     Repository = {
         Owner = "Zogog",
@@ -46,7 +46,7 @@ local BASE_URL = string.format(
 local MANIFEST = {
     { id = "state",          path = "src/core/State.lua",          required = true  },
     { id = "config",         path = "src/core/Config.lua",         required = true  },
-    { id = "runtime",        path = "src/core/Runtime.lua",        required = true  },
+    { id = "runtime",        path = "src/core/Runtime.lua",        required = true  },\n    { id = "anti_afk",       path = "src/core/AntiAFK.lua",        required = true  },
     { id = "scheduler",      path = "src/core/Scheduler.lua",      required = true  },
     { id = "game_api",       path = "src/core/GameAPI.lua",        required = true  },
     { id = "pet_api",        path = "src/core/PetAPI.lua",         required = true  },
