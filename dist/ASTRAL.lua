@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.4 — Feeding fallback (experimental)
+    ASTRAL 1.0.0-dev.5 — Feeding fallback (experimental)
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.4",
-    Build = "Hungry / Thirsty feeding fallback",
+    Version = "1.0.0-dev.5",
+    Build = "Full core pet ailments (experimental)",
 
     Repository = {
         Owner = "Zogog",
@@ -50,11 +50,16 @@ local MANIFEST = {
     { id = "scheduler",      path = "src/core/Scheduler.lua",      required = true  },
     { id = "game_api",       path = "src/core/GameAPI.lua",        required = true  },
     { id = "feeding_api",    path = "src/core/FeedingAPI.lua",     required = true  },
+    { id = "ailment_support", path = "src/core/AilmentSupport.lua", required = true  },
     { id = "module_manager", path = "src/core/ModuleManager.lua", required = true  },
     { id = "ailments",       path = "src/modules/autofarm/AilmentRegistry.lua", required = true  },
     { id = "autofarm",       path = "src/modules/autofarm/Autofarm.lua",        required = true  },
     { id = "play",           path = "src/modules/autofarm/ailments/Play.lua",   required = true  },
     { id = "feeding",        path = "src/modules/autofarm/ailments/Feeding.lua", required = true },
+    { id = "care",           path = "src/modules/autofarm/ailments/Care.lua", required = true },
+    { id = "travel",         path = "src/modules/autofarm/ailments/Travel.lua", required = true },
+    { id = "movement",       path = "src/modules/autofarm/ailments/Movement.lua", required = true },
+    { id = "mystery",        path = "src/modules/autofarm/ailments/Mystery.lua", required = true },
     { id = "feature_stubs",  path = "src/modules/Stubs.lua",      required = false },
     { id = "window",         path = "src/ui/Window.lua",          required = true  },
 }
