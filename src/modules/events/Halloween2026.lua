@@ -25,7 +25,7 @@ return function(ASTRAL)
         Name = "Halloween 2026",
         Page = "Events",
         Description = "Ghost Gallery, Crypt, Twigs, Candy Corn, quests, event shop and session statistics.",
-        Version = "0.1.5-dev.6.11.5-crypt-equip-remote",
+        Version = "0.1.6-dev.6.11.6-crypt-claim-latch",
         Implemented = true,
         Enabled = false,
         Busy = false,
@@ -58,6 +58,10 @@ return function(ASTRAL)
         LastError = nil,
         LastGhostMessage = 0,
         PendingCryptLocks = {},
+        -- A final Crypt floor remains final after ClaimTombSpider. Never
+        -- re-send that purchase/claim on worker ticks. Arm only after this
+        -- session has observed an active non-final Crypt floor.
+        CryptFinalClaimArmed = false,
         GhostTarget = nil,
         GhostUseToken = nil,
         GhostTargetIsProp = false,
@@ -533,21 +537,47 @@ return function(ASTRAL)
 
         local floorIndex = #manager.floors
         local floor = manager.floors[floorIndex]
-        if floor.is_final or floor.coffins == 0 or emptyTable(floor.coffins) then
+        local finalFloor = floor.is_final or floor.coffins == 0 or emptyTable(floor.coffins)
+
+        if finalFloor then
+            -- Runtime validation exposed an important server behaviour: the
+            -- final manager state persists after a successful claim and the
+            -- endpoint will accept another key on every call. ASTRAL used to
+            -- hit this branch every worker pass, consuming every Rusty Key.
+            -- Claim at most once after we have actually observed/progressed a
+            -- non-final floor in this run. A fresh run rearms below.
+            if not Halloween.CryptFinalClaimArmed then
+                Halloween.CurrentAction = "Crypt: completed - waiting for a new run"
+                return false
+            end
+
+            Halloween.CryptFinalClaimArmed = false
             Halloween.CurrentAction = "Crypt: claiming Tomb Spider"
             local claim = getNet("Halloween2026/ClaimTombSpider")
             if claim then
+                local keysBefore = countKind("halloween_2026_rusty_key")
                 local ok, result = pcall(function() return claim:InvokeServer() end)
                 if ok then
                     Halloween.PendingCryptLocks = {}
-                    log("Tomb Spider claim sent")
-                    task.wait(2)
+                    task.wait(0.5)
+                    local keysAfter = countKind("halloween_2026_rusty_key")
+                    log(
+                        "Tomb Spider claim sent once"
+                        .. " | keys " .. tostring(keysBefore)
+                        .. " -> " .. tostring(keysAfter)
+                    )
                     return true
                 end
                 Halloween.LastError = tostring(result)
+                log("Tomb Spider claim failed: " .. tostring(result))
             end
             return false
         end
+
+        -- Seeing an active floor is the only thing that rearms the final
+        -- reward. Merely toggling Crypt or changing modes cannot replay an
+        -- already-completed final floor.
+        Halloween.CryptFinalClaimArmed = true
 
         if not CryptLayout or not CryptLayout.floor_contents then
             Halloween.CurrentAction = "Crypt: layout module unavailable"
