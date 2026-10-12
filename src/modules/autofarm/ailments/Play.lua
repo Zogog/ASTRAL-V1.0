@@ -2,7 +2,7 @@ return function(ASTRAL)
     local Play = {
         Id = "play",
         Name = "Play",
-        Version = "0.1.1-dev.6",
+        Version = "0.1.2-dev.6.5-ds",
         Priority = 50,
     }
 
@@ -51,7 +51,7 @@ return function(ASTRAL)
         local deadline = os.clock() + 55
 
         print("")
-        print("[ASTRAL PLAY] Starting verified v0.8.3b Play pipeline")
+        print("[ASTRAL PLAY] Starting D&S 4.1.3 pet-object Play pipeline")
         print("[ASTRAL PLAY] pet_unique=", petUnique)
         print("[ASTRAL PLAY] toy_kind=", toy.kind)
         print("[ASTRAL PLAY] toy_unique=", toy.unique)
@@ -76,12 +76,22 @@ return function(ASTRAL)
                     progressBefore
                 )
 
-                local thrown, result = ASTRAL.Game:ThrowPlayToy(toy.unique)
+                local support = ASTRAL.NeedSupport
+                local _, petCharacter = support and support:PetRoot()
+                if not petCharacter then
+                    error("Equipped pet model unavailable for D&S Play")
+                end
+
+                local thrown, result = ASTRAL.Game:ThrowPlayToy(
+                    toy.unique,
+                    petUnique,
+                    petCharacter
+                )
                 if not thrown then
                     error(result)
                 end
 
-                print("[ASTRAL PLAY] Created thrown toy:", result)
+                print("[ASTRAL PLAY] D&S Create/Grab/Drop completed:", result)
 
                 -- v0.8.3b waited for actual Play progress rather than using a
                 -- blind fixed delay. Keep that verified behaviour.
@@ -120,10 +130,8 @@ return function(ASTRAL)
                     task.wait(0.35)
                 else
                     warn("[ASTRAL PLAY] Throw did not advance within 10s; resetting toy state")
-                    -- Best-effort reset before another legitimate captured
-                    -- throw sequence. This prevents a rejected START/object
-                    -- creation from leaving the toy state stale.
-                    ASTRAL.Game:CleanupPlayToy(toy.unique)
+                    -- D&S cleans each spawned object immediately after
+                    -- Grab/Drop, so there is no ToolAPI START/END state to reset.
 
                     if not waitForPetEntity(5) then
                         warn("[ASTRAL PLAY] Pet model not ready after failed throw")
@@ -133,8 +141,6 @@ return function(ASTRAL)
                 end
             end
         end)
-
-        ASTRAL.Game:CleanupPlayToy(toy.unique)
 
         if not ok then
             warn("[ASTRAL PLAY] Pipeline error:", err)
