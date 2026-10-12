@@ -24,6 +24,20 @@ local ASTRAL = {
 
 local env = getgenv and getgenv() or _G
 
+-- dev.6.10.1 migration: preserve Neon Factory targets selected in the
+-- previous planner instance before its runtime is destroyed.
+if not env.ASTRALNeonTargets
+    and env.ASTRAL
+    and env.ASTRAL.Modules
+    and env.ASTRAL.Modules.Get then
+    pcall(function()
+        local previousFactory = env.ASTRAL.Modules:Get("neon_factory")
+        if previousFactory and type(previousFactory.Targets) == "table" then
+            env.ASTRALNeonTargets = previousFactory.Targets
+        end
+    end)
+end
+
 -- Cleanly close a previous ASTRAL session before replacing it.
 if env.ASTRAL and env.ASTRAL.Runtime and env.ASTRAL.Runtime.Destroy then
     pcall(function()
