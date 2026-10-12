@@ -4,7 +4,6 @@ return function(ASTRAL)
         {"friendship",     "Friendship",      "Pets",         "Full-grown friendship and Age-Up Potion progression."},
         {"potions",        "Potion Feeder",   "Pets",         "Controlled Age-Up Potion usage."},
         {"eggs",           "Egg Manager",     "Eggs",         "Purchase, equip, hatch and target management."},
-        {"pet_pens",       "Pet Pens",        "Pet Pens",     "Assignment, XP/Bucks claiming and replacement queues."},
         {"neon_factory",   "Neon Factory",    "Neon Factory", "Normal -> Neon -> Mega production planning."},
         {"halloween_2026", "Halloween 2026",  "Events",       "Ghost Clusters, Crypt, Hauntlet and event goals."},
         {"inventory",      "Inventory",       "Inventory",    "Inventory metadata and collection tracking."},
