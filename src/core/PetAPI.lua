@@ -12,7 +12,7 @@ return function(ASTRAL)
     local SharedConstants = load("SharedConstants")
 
     local PetAPI = {
-        Version = "0.1.1-dev.6.3",
+        Version = "0.1.2-dev.6.8-growth-eta",
     }
 
     local function properties(item)
@@ -94,6 +94,39 @@ return function(ASTRAL)
             isEgg = isEgg,
             isFullGrown = age ~= nil and age >= 6,
         }
+    end
+
+    -- Return the exact XP still required to reach age 6 (Full Grown).
+    -- This deliberately uses Adopt Me's own PetProgressionDB thresholds rather
+    -- than hard-coded rarity totals, so Pet Pens and future progression UIs
+    -- share the same source of truth as Describe().
+    function PetAPI:GetRemainingGrowthXP(petOrItem)
+        if type(petOrItem) ~= "table" then return nil end
+
+        local pet = petOrItem.item and petOrItem or self:Describe(petOrItem)
+        if not pet or pet.isEgg or pet.age == nil then return nil end
+        if pet.age >= 6 then return 0 end
+
+        local item = pet.item or petOrItem
+        local definition = item.kind and InventoryDB.pets
+            and InventoryDB.pets[item.kind] or nil
+        if not definition then return nil end
+
+        local ok, thresholds = pcall(function()
+            return PetProgressionDB.get_xp_per_age(definition)
+        end)
+        if not ok or type(thresholds) ~= "table" then return nil end
+
+        local currentTarget = tonumber(thresholds[pet.age])
+        if not currentTarget then return nil end
+
+        local remaining = math.max(0, currentTarget - (tonumber(pet.xp) or 0))
+        for age = pet.age + 1, 5 do
+            local stageXP = tonumber(thresholds[age])
+            if not stageXP then return nil end
+            remaining += stageXP
+        end
+        return remaining
     end
 
     function PetAPI:GetCurrent()
