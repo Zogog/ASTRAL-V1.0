@@ -8,7 +8,7 @@ return function(ASTRAL)
     local Fsys = require(RS:WaitForChild("Fsys"))
     local ClientData = Fsys.load("ClientData")
     local EquippedPets = Fsys.load("EquippedPets")
-    local S = { Cooldowns = {}, Version = "0.1.1-dev.5.1" }
+    local S = { Cooldowns = {}, Version = "0.1.2-dev.5.1" }
 
     function S:Log(message)
         print("[ASTRAL NEEDS] " .. tostring(message))
@@ -118,16 +118,80 @@ return function(ASTRAL)
     function S:UseFurniture(kind, ids, interaction, petUnique, context, timeout)
         local furniture, reason = self:HouseFurniture(ids)
         if not furniture then return false, reason end
-        local root, petChar = self:PetRoot()
-        if not root or not petChar then return false, "Equipped pet model unavailable" end
         local remote = self:Remote("HousingAPI/ActivateFurniture")
-        self:Log(kind .. ": using furniture " .. tostring(furniture.id)
-            .. " from slot " .. tostring(furniture.slot)
-            .. " / " .. tostring(interaction or "UseBlock"))
-        local used, err = self:Call(remote, Player, furniture.unique, interaction or "UseBlock", { cframe = root.CFrame }, petChar)
-        if not used then return false, err end
-        return self:WaitClear(kind, petUnique, context, timeout or 30)
+        if not remote then return false, "ActivateFurniture unavailable" end
+
+        local totalTimeout = timeout or 30
+        local deadline = os.clock() + totalTimeout
+        local baseline = Game:GetAilmentProgress(kind) or 0
+        local maxAttempts = 3
+
+        for attempt = 1, maxAttempts do
+            if context:IsCancelled() then return false, "Cancelled" end
+            if Game:GetCurrentPetUnique() ~= petUnique then return false, "Pet changed" end
+            if not Game:PetHasAilment(kind) then return true, "Complete" end
+
+            local root, petChar = self:PetRoot()
+            if not root or not petChar then return false, "Equipped pet model unavailable" end
+
+            local suffix = attempt > 1 and (" (attempt " .. tostring(attempt) .. ")") or ""
+            self:Log(kind .. ": using furniture " .. tostring(furniture.id)
+                .. " from slot " .. tostring(furniture.slot)
+                .. " / " .. tostring(interaction or "UseBlock") .. suffix)
+
+            local callStarted = os.clock()
+            local used, err = self:Call(remote, Player, furniture.unique,
+                interaction or "UseBlock", { cframe = root.CFrame }, petChar)
+            local callSeconds = os.clock() - callStarted
+            if not used then
+                if attempt >= maxAttempts then return false, err end
+                self:Log(kind .. ": activation failed; retrying: " .. tostring(err))
+                task.wait(0.75)
+            else
+                if not Game:PetHasAilment(kind) then return true, "Complete" end
+
+                -- Successful furniture use often keeps InvokeServer blocked for
+                -- the interaction duration. A silently rejected activation
+                -- returns almost immediately. Only retry the latter case.
+                if callSeconds >= 2.0 then
+                    local remaining = math.max(0, deadline - os.clock())
+                    return self:WaitClear(kind, petUnique, context, remaining)
+                end
+
+                local confirmUntil = math.min(deadline, os.clock() + 2.5)
+                local progressed = false
+                while os.clock() < confirmUntil do
+                    local status, why = self:Check(kind, petUnique, context)
+                    if status ~= nil then return status, why end
+                    local progress = Game:GetAilmentProgress(kind)
+                    if progress and progress > baseline + 0.0001 then
+                        progressed = true
+                        self:Log(kind .. ": furniture interaction confirmed progress "
+                            .. tostring(baseline) .. " -> " .. tostring(progress))
+                        break
+                    end
+                    task.wait(0.2)
+                end
+
+                if progressed then
+                    local remaining = math.max(0, deadline - os.clock())
+                    return self:WaitClear(kind, petUnique, context, remaining)
+                end
+
+                if attempt < maxAttempts and os.clock() < deadline then
+                    self:Log(kind .. ": activation returned without progress; retrying")
+                    task.wait(0.75)
+                end
+            end
+        end
+
+        local remaining = math.max(0, deadline - os.clock())
+        if remaining > 0 then
+            return self:WaitClear(kind, petUnique, context, remaining)
+        end
+        return not Game:PetHasAilment(kind), "Timed out"
     end
+
     function S:GoLocation(kind, destination, petUnique, context, timeout)
         local remote = self:Remote("LocationAPI/SetLocation")
         local ok, why = self:Call(remote, destination, nil, nil)
