@@ -9,8 +9,8 @@ return function(ASTRAL)
         Id = "neon_factory",
         Name = "Neon Factory",
         Page = "Neon Factory",
-        Description = "See ready/closest Neon and Mega pets and choose production targets.",
-        Version = "0.1.0-dev.6.10-planner",
+        Description = "Plan Normal -> Neon -> Mega production and fuse selected ready targets.",
+        Version = "0.2.0-dev.6.10.1-fusion",
         Implemented = true,
         Enabled = false,
         Busy = false,
@@ -22,6 +22,9 @@ return function(ASTRAL)
         LastScan = 0,
         ScanInterval = 8,
         LastMessage = "Planner ready",
+        FusionCount = 0,
+        LastFusion = nil,
+        ActionCooldown = 4,
     }
 
     local function log(message)
@@ -263,13 +266,176 @@ return function(ASTRAL)
             ready = #self.Ready,
             neonTargets = neonTargets,
             megaTargets = megaTargets,
+            fusionCount = self.FusionCount,
+            lastFusion = self.LastFusion and {
+                kind = self.LastFusion.kind,
+                name = self.LastFusion.name,
+                result = self.LastFusion.result,
+                at = self.LastFusion.at,
+            } or nil,
         }
+    end
+
+    local function actionBlocked()
+        local queue = ASTRAL.Modules:Get("pet_queue")
+        local pens = ASTRAL.Modules:Get("pet_pens")
+        local eggs = ASTRAL.Modules:Get("eggs")
+        local farm = ASTRAL.Modules:Get("pet_farm")
+
+        if queue and queue.Busy then return true, "Pet Queue busy" end
+        if pens and pens.Busy then return true, "Pet Pens busy" end
+        if eggs and eggs.Busy then return true, "Egg Manager busy" end
+        if farm and farm.Busy then return true, "Autofarm busy" end
+        return false
+    end
+
+    local function fusionCandidates(kind, neon)
+        local candidates = {}
+        for _, pet in ipairs(Pets:GetPets()) do
+            if pet.kind == kind
+                and not pet.isEgg
+                and pet.isFullGrown
+                and not pet.isMega
+                and ((neon and pet.isNeon) or (not neon and not pet.isNeon)) then
+                table.insert(candidates, pet)
+            end
+        end
+
+        -- Deterministic choice. Prefer unmodified pets first so valuable
+        -- Fly/Ride variants are not consumed unless they are required.
+        table.sort(candidates, function(a, b)
+            local ap = (a.item and a.item.properties) or {}
+            local bp = (b.item and b.item.properties) or {}
+            local aSpecial = (ap.flyable or ap.is_flyable or ap.rideable or ap.is_rideable) and 1 or 0
+            local bSpecial = (bp.flyable or bp.is_flyable or bp.rideable or bp.is_rideable) and 1 or 0
+            if aSpecial ~= bSpecial then return aSpecial < bSpecial end
+            return tostring(a.unique) < tostring(b.unique)
+        end)
+
+        if #candidates < 4 then return nil end
+        return {candidates[1], candidates[2], candidates[3], candidates[4]}
+    end
+
+    function Factory:Fuse(kind, toMega)
+        if self.Busy then return false, "Neon Factory busy" end
+        local blocked, reason = actionBlocked()
+        if blocked then return false, reason end
+
+        local target = self.Targets[kind] or {}
+        if toMega and not target.mega then return false, "Mega target is off" end
+        if not toMega and not target.neon then return false, "Neon target is off" end
+
+        local candidates = fusionCandidates(kind, toMega == true)
+        if not candidates then
+            return false, toMega and "Need four Luminous Neons" or "Need four Full Grown normals"
+        end
+
+        local remote = ASTRAL.Game:GetRemote("PetAPI/DoNeonFusion")
+        if not remote then return false, "PetAPI/DoNeonFusion unavailable" end
+
+        self.Busy = true
+        local name = candidates[1].name or kind
+        local before = {}
+        for _, pet in ipairs(candidates) do before[pet.unique] = true end
+
+        self.LastMessage = string.format(
+            "Fusing %s -> %s...",
+            tostring(name),
+            toMega and "Mega" or "Neon"
+        )
+        log(self.LastMessage)
+
+        local ok, err = pcall(function()
+            remote:InvokeServer({
+                candidates[1].unique,
+                candidates[2].unique,
+                candidates[3].unique,
+                candidates[4].unique,
+            })
+        end)
+        if not ok then
+            self.Busy = false
+            self.LastMessage = "Fusion remote failed: " .. tostring(err)
+            warn("[ASTRAL NEON] " .. self.LastMessage)
+            return false, err
+        end
+
+        -- D&S 4.1.3 waits four seconds after DoNeonFusion. We additionally
+        -- verify inventory state before recording success.
+        local deadline = os.clock() + 6
+        local verified = false
+        while os.clock() < deadline do
+            task.wait(0.35)
+            local consumed = 0
+            local produced = false
+            for _, pet in ipairs(Pets:GetPets()) do
+                if before[pet.unique] then consumed += 1 end
+                if pet.kind == kind then
+                    if toMega and pet.isMega then produced = true end
+                    if not toMega and pet.isNeon and not pet.isMega then produced = true end
+                end
+            end
+            if consumed < 4 and produced then
+                verified = true
+                break
+            end
+        end
+
+        self.Busy = false
+        self.LastScan = 0
+        self:Snapshot()
+
+        if not verified then
+            self.LastMessage = string.format(
+                "%s fusion sent; inventory transition not confirmed",
+                toMega and "Mega" or "Neon"
+            )
+            warn("[ASTRAL NEON] " .. self.LastMessage)
+            return false, self.LastMessage
+        end
+
+        self.FusionCount += 1
+        self.LastFusion = {
+            kind = kind,
+            name = name,
+            result = toMega and "MEGA" or "NEON",
+            at = os.time(),
+        }
+        self.LastMessage = string.format(
+            "Created %s %s | session fusions %d",
+            toMega and "Mega" or "Neon",
+            tostring(name),
+            self.FusionCount
+        )
+        log(self.LastMessage)
+        return true
+    end
+
+    function Factory:RunOneFusion()
+        if not self.Enabled or self.Busy then return false end
+        local blocked = actionBlocked()
+        if blocked then return false end
+
+        -- Finish Mega-ready targets first, then create requested Neons.
+        for _, entry in ipairs(self.Ready) do
+            local target = self.Targets[entry.kind] or {}
+            if target.mega and (entry.readyMegas or 0) > 0 then
+                return self:Fuse(entry.kind, true)
+            end
+        end
+        for _, entry in ipairs(self.Ready) do
+            local target = self.Targets[entry.kind] or {}
+            if target.neon and (entry.readyNeons or 0) > 0 then
+                return self:Fuse(entry.kind, false)
+            end
+        end
+        return false
     end
 
     function Factory:SetEnabled(enabled)
         self.Enabled = enabled == true
         self.LastMessage = self.Enabled
-            and "Targets armed; automatic fusion not enabled in planner v1"
+            and "Factory armed; selected ready targets will fuse automatically"
             or "Planner active; automatic fusion off"
         log(self.LastMessage)
         return true
@@ -283,6 +449,10 @@ return function(ASTRAL)
                 and (Factory.LastScan == 0
                     or os.clock() - Factory.LastScan >= Factory.ScanInterval) then
                 Factory:Snapshot()
+            end
+            if Factory.Enabled and not Factory.Busy then
+                local acted = Factory:RunOneFusion()
+                if acted then task.wait(Factory.ActionCooldown) end
             end
             task.wait(1)
         end
