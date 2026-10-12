@@ -708,6 +708,12 @@ return function(ASTRAL)
         end)
 
         function UI:RefreshPetQueue()
+            local now = os.clock()
+            if self._PetQueueRefreshAt and now < self._PetQueueRefreshAt then
+                return
+            end
+            self._PetQueueRefreshAt = now + 0.35
+
             local statusInfo = petQueue:GetStatus()
             local current = statusInfo.current
             if current then
