@@ -3,7 +3,6 @@ return function(ASTRAL)
         {"baby_farm",      "Baby Autofarm",   "Autofarm",     "Optional baby-needs automation."},
         {"friendship",     "Friendship",      "Pets",         "Full-grown friendship and Age-Up Potion progression."},
         {"potions",        "Potion Feeder",   "Pets",         "Controlled Age-Up Potion usage."},
-        {"neon_factory",   "Neon Factory",    "Neon Factory", "Normal -> Neon -> Mega production planning."},
         {"halloween_2026", "Halloween 2026",  "Events",       "Ghost Clusters, Crypt, Hauntlet and event goals."},
         {"inventory",      "Inventory",       "Inventory",    "Inventory metadata and collection tracking."},
         {"purchases",      "Purchases",       "Inventory",    "Shared budget-aware purchase engine."},
