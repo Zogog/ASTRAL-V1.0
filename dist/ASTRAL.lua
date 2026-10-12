@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6.8.1-bored-hotfix",
-    Build = "Pet Pens v2 + verified Playground Bored handler",
+    Version = "1.0.0-dev.6.9-egg-manager",
+    Build = "Egg Manager v1 + exclusive active-slot ownership + Bored platform fix",
 
     Repository = {
         Owner = "Zogog",
@@ -59,6 +59,7 @@ local MANIFEST = {
     { id = "ailments",        path = "src/modules/autofarm/AilmentRegistry.lua", required = true },
     { id = "autofarm",        path = "src/modules/autofarm/Autofarm.lua", required = true },
     { id = "pet_queue",       path = "src/modules/pets/PetQueue.lua", required = true },
+    { id = "egg_manager",     path = "src/modules/pets/EggManager.lua", required = true },
     { id = "pet_pens",        path = "src/modules/pets/PetPens.lua",  required = false },
 
     -- One file per core pet ailment.
