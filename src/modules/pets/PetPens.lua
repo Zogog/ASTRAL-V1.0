@@ -1,6 +1,8 @@
--- ASTRAL dev.6.7 Pet Pens.
--- Restores the verified v0.5.6/v0.5.7b idle-progression lifecycle:
--- claim -> refresh -> remove Full Grown -> refresh -> fill vacancies.
+-- ASTRAL dev.6.8 Pet Pens v2.
+-- Verified idle-progression lifecycle:
+-- claim -> measure -> refresh -> remove Full Grown -> refresh -> fill vacancies.
+-- UI-facing state is cached as plain Lua data so Window.lua never needs to
+-- touch Adopt Me/Fsys APIs from executor GUI callback threads.
 return function(ASTRAL)
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local Fsys = require(ReplicatedStorage:WaitForChild("Fsys"))
@@ -13,18 +15,27 @@ return function(ASTRAL)
         Name = "Pet Pens",
         Page = "Pet Pens",
         Description = "Claim idle progression, replace Full Grown pets and keep Pet Pens filled.",
-        Version = "0.1.0-dev.6.7-restored",
+        Version = "0.2.0-dev.6.8-ui-eta",
         Implemented = true,
         Enabled = false,
         Busy = false,
         Interval = 60,
-        -- Four slots are the last verified capacity. Jamie owns the fifth
-        -- purchased slot, but its ownership/capacity field is not yet proven.
         Capacity = 4,
+
+        -- Approximate online Pet Pen rate established during our earlier
+        -- research. Once ASTRAL has two committed samples for a pet, the UI
+        -- switches to that pet's measured rolling rate instead.
+        BaselineXPPerHour = 800,
+
         LastCycle = 0,
         LastMessage = "Off",
+        LastSummary = "No cycle yet",
         Occupied = 0,
         LastClaim = 0,
+        ForceCycle = false,
+
+        SlotSnapshots = {},
+        Measurements = {},
     }
 
     local function log(message)
@@ -63,25 +74,149 @@ return function(ASTRAL)
         return false
     end
 
+    local function describeUnique(unique)
+        local item = Pets:GetItem(unique)
+        if not item then return nil end
+        return Pets:Describe(item)
+    end
+
+    local function remainingXP(pet)
+        if not pet then return nil end
+        return Pets:GetRemainingGrowthXP(pet)
+    end
+
     local function isFullGrown(unique, state)
         if type(state) == "table" then
             if state.max_age == true then return true end
             if tonumber(state.age) and tonumber(state.age) >= 6 then return true end
         end
-        local item = Pets:GetItem(unique)
-        local described = item and Pets:Describe(item) or nil
-        return described and described.isFullGrown == true or false
+        local pet = describeUnique(unique)
+        return pet and pet.isFullGrown == true or false
+    end
+
+    local function formatRate(rate)
+        return rate and math.floor(rate + 0.5) or nil
+    end
+
+    -- Measure progression using the drop in total XP remaining rather than
+    -- current-stage XP. This remains correct when a claim crosses an age
+    -- boundary and the pet's stage XP resets.
+    function Pens:UpdateMeasurements(active)
+        local now = os.clock()
+        local present = {}
+
+        for unique in pairs(active or {}) do
+            present[unique] = true
+            local pet = describeUnique(unique)
+            local remaining = remainingXP(pet)
+            if remaining ~= nil then
+                local previous = self.Measurements[unique]
+                local measuredRate = previous and previous.rate or nil
+
+                if previous
+                    and previous.remaining ~= nil
+                    and previous.at
+                    and now - previous.at >= 30 then
+
+                    local gained = previous.remaining - remaining
+                    local elapsed = now - previous.at
+                    if gained > 0 and elapsed > 0 then
+                        local sample = gained / elapsed * 3600
+                        -- Ignore clearly corrupt samples while leaving a wide
+                        -- range for future game-side rate changes.
+                        if sample >= 1 and sample <= 10000 then
+                            measuredRate = measuredRate
+                                and (measuredRate * 0.65 + sample * 0.35)
+                                or sample
+                            log(string.format(
+                                "%s measured %.0f XP/hr",
+                                tostring(pet and pet.name or unique),
+                                measuredRate
+                            ))
+                        end
+                    end
+                end
+
+                self.Measurements[unique] = {
+                    remaining = remaining,
+                    at = now,
+                    rate = measuredRate,
+                }
+            end
+        end
+
+        for unique in pairs(self.Measurements) do
+            if not present[unique] then
+                self.Measurements[unique] = nil
+            end
+        end
+    end
+
+    function Pens:RefreshSlots(active)
+        active = active or getActive()
+        local slots = {}
+
+        for unique, state in pairs(active) do
+            local pet = describeUnique(unique)
+            local remaining = remainingXP(pet)
+            local measurement = self.Measurements[unique]
+            local measuredRate = measurement and measurement.rate or nil
+            local rate = measuredRate or self.BaselineXPPerHour
+            local etaSeconds = remaining ~= nil and rate and rate > 0
+                and (remaining / rate * 3600) or nil
+
+            table.insert(slots, {
+                unique = tostring(unique),
+                name = pet and pet.name or tostring(unique),
+                kind = pet and pet.kind or nil,
+                age = pet and pet.age or tonumber(type(state) == "table" and state.age),
+                xp = pet and pet.xp or 0,
+                targetXP = pet and pet.targetXP or nil,
+                isFullGrown = pet and pet.isFullGrown == true
+                    or (type(state) == "table" and state.max_age == true),
+                remainingXP = remaining,
+                xpPerHour = formatRate(rate),
+                rateMeasured = measuredRate ~= nil,
+                etaSeconds = etaSeconds and math.max(0, math.floor(etaSeconds + 0.5)) or nil,
+            })
+        end
+
+        table.sort(slots, function(a, b)
+            if a.name == b.name then return a.unique < b.unique end
+            return tostring(a.name) < tostring(b.name)
+        end)
+
+        self.SlotSnapshots = slots
+        self.Occupied = #slots
+        return slots
+    end
+
+    function Pens:GetSlots()
+        local copy = {}
+        for i, slot in ipairs(self.SlotSnapshots) do
+            local row = {}
+            for key, value in pairs(slot) do row[key] = value end
+            copy[i] = row
+        end
+        return copy
     end
 
     function Pens:GetStatus()
+        local nextCycleIn
+        if self.Enabled then
+            nextCycleIn = math.max(0, self.Interval - (os.clock() - self.LastCycle))
+        end
         return {
             enabled = self.Enabled,
             implemented = true,
             busy = self.Busy,
             message = self.LastMessage,
+            summary = self.LastSummary,
             occupied = self.Occupied,
             capacity = self.Capacity,
             lastClaim = self.LastClaim,
+            nextCycleIn = nextCycleIn,
+            baselineXPPerHour = self.BaselineXPPerHour,
         }
     end
 
@@ -91,12 +226,24 @@ return function(ASTRAL)
         self.Enabled = enabled
         if enabled then
             self.LastMessage = "Starting idle-progression cycle"
-            self.LastCycle = 0 -- immediate first cycle
+            self.LastCycle = 0
+            self.ForceCycle = true
             log("enabled")
         else
             self.LastMessage = "Off"
+            self.ForceCycle = false
             log("disabled")
         end
+        return true
+    end
+
+    -- Executor-safe UI request: the GUI only flips a Lua flag. The normal
+    -- Pet Pens worker performs the remote/API work on its own thread.
+    function Pens:RequestCycle()
+        if not self.Enabled then return false, "Enable Pet Pens first" end
+        if self.Busy then return false, "Pet Pens are already busy" end
+        self.ForceCycle = true
+        self.LastMessage = "Claim requested"
         return true
     end
 
@@ -149,18 +296,20 @@ return function(ASTRAL)
         end
 
         self.Busy = true
+        self.ForceCycle = false
         self.LastCycle = os.clock()
 
         local ok, err = pcall(function()
-            -- The old Auto Pet Pen always claimed first so accumulated XP/Bucks
-            -- were committed before any assignment was changed.
             local claimed, claimReason = self:Claim()
             if not claimed then
                 warn("[ASTRAL PET PENS] Claim failed:", claimReason)
             end
 
+            -- Read committed progression immediately after the claim and turn
+            -- it into a per-pet observed XP/hour sample.
             local active = getActive()
-            self.Occupied = countActive(active)
+            self:UpdateMeasurements(active)
+            self:RefreshSlots(active)
             log(string.format("refresh: %d/%d occupied", self.Occupied, self.Capacity))
 
             local removed = 0
@@ -210,18 +359,35 @@ return function(ASTRAL)
                 end
             end
 
-            self.Occupied = countActive(getActive())
-            self.LastMessage = string.format(
+            active = getActive()
+
+            -- New assignments need a clean measurement baseline so their first
+            -- observed rate is calculated over a real full interval.
+            for unique in pairs(active) do
+                if not self.Measurements[unique] then
+                    local pet = describeUnique(unique)
+                    local remaining = remainingXP(pet)
+                    if remaining ~= nil then
+                        self.Measurements[unique] = {
+                            remaining = remaining,
+                            at = os.clock(),
+                            rate = nil,
+                        }
+                    end
+                end
+            end
+
+            self:RefreshSlots(active)
+            self.LastSummary = string.format(
                 "%d/%d occupied | claimed | %d removed | %d added",
                 self.Occupied,
                 self.Capacity,
                 removed,
                 added
             )
-            log(self.LastMessage)
+            self.LastMessage = self.LastSummary
+            log(self.LastSummary)
 
-            -- Refresh queue caches after pen membership changes so the UI and
-            -- active queue immediately reserve every newly assigned pen pet.
             if queue and queue.Snapshot then
                 queue:Snapshot()
             end
@@ -240,7 +406,7 @@ return function(ASTRAL)
         while not ASTRAL.Runtime.Destroyed do
             if Pens.Enabled
                 and not Pens.Busy
-                and os.clock() - Pens.LastCycle >= Pens.Interval then
+                and (Pens.ForceCycle or os.clock() - Pens.LastCycle >= Pens.Interval) then
                 Pens:Cycle()
             end
             task.wait(1)
