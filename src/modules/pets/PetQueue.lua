@@ -1,6 +1,6 @@
--- ASTRAL dev.6 Pet Queue.
--- Safe first pass: grow non-egg pets to Full Grown, then equip the next
--- eligible inventory pet. Pet Pen assignments are reserved by default.
+-- ASTRAL Pet Queue v2 foundation.
+-- Preserve verified dev.6 auto-switch behaviour; add ordered queue snapshots,
+-- inventory/progress visibility and manual queue operations without UI coupling.
 return function(ASTRAL)
     local Pets = assert(ASTRAL.Pets, "PetAPI must load before Pet Queue")
 
@@ -8,8 +8,8 @@ return function(ASTRAL)
         Id = "pet_queue",
         Name = "Pet Queue",
         Page = "Pets",
-        Description = "Automatically progress growable pets to Full Grown, then equip the next pet.",
-        Version = "0.1.0-dev.6",
+        Description = "Grow All or build a manual pet queue; switch after Full Grown.",
+        Version = "0.2.0-dev.6.6-queue-foundation",
         Implemented = true,
         Enabled = false,
         Busy = false,
@@ -18,6 +18,10 @@ return function(ASTRAL)
         Current = nil,
         Next = nil,
         Remaining = 0,
+        Mode = "grow_all",
+        ManualOrder = {},
+        QueueList = {},
+        InventoryStats = {},
         LastMessage = "Off",
     }
 
@@ -26,15 +30,139 @@ return function(ASTRAL)
         if ASTRAL.State then pcall(function() ASTRAL.State:Log("Pet Queue: " .. tostring(message)) end) end
     end
 
+    -- Eligible pets are defined by PetAPI, including its established
+    -- exclusions for eggs, Full Grown pets and Pet Pen assignments.
+    -- Manual entries are revalidated against inventory every scan.
     function Queue:Snapshot()
         local current = Pets:GetCurrent()
-        local candidates = Pets:GetGrowablePets({
+        local eligible = Pets:GetGrowablePets({
             currentUnique = current and current.unique or nil,
         })
+        local candidates = eligible
+
+        if self.Mode == "manual" then
+            local byUnique = {}
+            for _, pet in ipairs(eligible) do
+                byUnique[pet.unique] = pet
+            end
+            candidates = {}
+            for _, unique in ipairs(self.ManualOrder) do
+                local pet = byUnique[unique]
+                if pet then table.insert(candidates, pet) end
+            end
+        end
+
+        local stats = {
+            total = 0,
+            growable = 0,
+            fullGrown = 0,
+            eggs = 0,
+            penAssigned = 0,
+        }
+        local pen = Pets:GetPenAssigned()
+        for _, pet in ipairs(Pets:GetPets()) do
+            stats.total += 1
+            if pet.isEgg then
+                stats.eggs += 1
+            elseif pet.isFullGrown then
+                stats.fullGrown += 1
+            elseif pen[pet.unique] then
+                stats.penAssigned += 1
+            elseif pet.age ~= nil and pet.age < 6 then
+                stats.growable += 1
+            end
+        end
+
         self.Current = current
+        self.QueueList = candidates
+        self.InventoryStats = stats
         self.Next = candidates[1]
         self.Remaining = #candidates
         return current, candidates
+    end
+
+    function Queue:GetQueue()
+        self:Snapshot()
+        local result = {}
+        for i, pet in ipairs(self.QueueList) do
+            result[i] = {
+                unique = pet.unique,
+                name = pet.name,
+                kind = pet.kind,
+                age = pet.age,
+                xp = pet.xp,
+                targetXP = pet.targetXP,
+            }
+        end
+        return result
+    end
+
+    function Queue:SetMode(mode)
+        if mode ~= "grow_all" and mode ~= "manual" then
+            return false, "Mode must be grow_all or manual"
+        end
+        self.Mode = mode
+        self:Snapshot()
+        self.LastMessage = mode == "manual"
+            and "Manual queue selected"
+            or "Grow All selected"
+        log("mode set to " .. mode)
+        return true
+    end
+
+    function Queue:AddPet(unique)
+        if not unique then return false, "Pet unique missing" end
+        for _, queued in ipairs(self.ManualOrder) do
+            if queued == unique then return false, "Pet already queued" end
+        end
+        local current = Pets:GetCurrent()
+        local eligible = Pets:GetGrowablePets({
+            currentUnique = current and current.unique or nil,
+        })
+        for _, pet in ipairs(eligible) do
+            if pet.unique == unique then
+                table.insert(self.ManualOrder, unique)
+                self:Snapshot()
+                return true
+            end
+        end
+        return false, "Pet is not eligible (equipped, egg, Full Grown or in Pet Pen)"
+    end
+
+    function Queue:RemovePet(unique)
+        for i, queued in ipairs(self.ManualOrder) do
+            if queued == unique then
+                table.remove(self.ManualOrder, i)
+                self:Snapshot()
+                return true
+            end
+        end
+        return false, "Pet is not in the manual queue"
+    end
+
+    function Queue:MovePet(unique, direction)
+        if direction ~= -1 and direction ~= 1 then
+            return false, "Direction must be -1 or 1"
+        end
+        for i, queued in ipairs(self.ManualOrder) do
+            if queued == unique then
+                local newIndex = i + direction
+                if newIndex < 1 or newIndex > #self.ManualOrder then
+                    return false, "Already at queue boundary"
+                end
+                self.ManualOrder[i], self.ManualOrder[newIndex] =
+                    self.ManualOrder[newIndex], self.ManualOrder[i]
+                self:Snapshot()
+                return true
+            end
+        end
+        return false, "Pet is not in the manual queue"
+    end
+
+    function Queue:ClearManual()
+        self.ManualOrder = {}
+        self:Snapshot()
+        return true
     end
 
     function Queue:GetStatus()
@@ -54,11 +182,25 @@ return function(ASTRAL)
                 message = self.LastMessage
             end
         end
+        if self.Enabled and current and current.targetXP and current.targetXP > 0
+            and current.age ~= nil and current.age < 6 then
+            local percent = math.clamp((current.xp or 0) / current.targetXP * 100, 0, 100)
+            message ..= string.format(" | stage %.0f%%", percent)
+        end
+        if self.Enabled then
+            message ..= " | " .. (self.Mode == "manual" and "Manual" or "Grow All")
+        end
         return {
             enabled = self.Enabled,
             implemented = true,
             busy = self.Busy,
             message = message,
+            mode = self.Mode,
+            current = current,
+            next = self.Next,
+            remaining = self.Remaining,
+            inventory = self.InventoryStats,
+            queue = self.QueueList,
         }
     end
 
@@ -103,9 +245,11 @@ return function(ASTRAL)
 
         local nextPet = candidates[1]
         if not nextPet then
-            self.LastMessage = current and current.isFullGrown
-                and "All eligible pets are Full Grown"
-                or "No eligible growable pets"
+            self.LastMessage = self.Mode == "manual"
+                and "Manual queue empty or all entries ineligible"
+                or (current and current.isFullGrown
+                    and "All eligible pets are Full Grown"
+                    or "No eligible growable pets")
             return false
         end
 
