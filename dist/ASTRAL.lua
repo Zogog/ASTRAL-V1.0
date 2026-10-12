@@ -8,7 +8,7 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6.11.3-twig-diagnostics",
+    Version = "1.0.0-dev.6.11.4-char-wrapper-location",
     Build = "Halloween 2026 suite + exact Twig diagnostics",
 
     Repository = {
