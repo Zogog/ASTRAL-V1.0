@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.6 — Pet Queue progression
+    ASTRAL 1.0.0-dev.6.1 — Pet Queue hotfix
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6-pet-queue",
-    Build = "18 modular core pet ailments + Pet Queue progression",
+    Version = "1.0.0-dev.6.1-pet-queue",
+    Build = "Pet Queue + capability-safe UI + resilient furniture discovery",
 
     Repository = {
         Owner = "Zogog",
@@ -158,7 +158,14 @@ end
 for _, entry in ipairs(MANIFEST) do
     local ok, reason = loadModule(entry)
     if ok then
-        print(string.format("[ASTRAL] Loaded %s", entry.id))
+        local loaded = ASTRAL.Boot.Loaded[entry.id]
+        local exported = loaded and loaded.export
+        local moduleVersion = type(exported) == "table" and exported.Version or nil
+        print(string.format(
+            "[ASTRAL] Loaded %s%s",
+            entry.id,
+            moduleVersion and (" [" .. tostring(moduleVersion) .. "]") or ""
+        ))
     else
         fail(entry, reason)
 
