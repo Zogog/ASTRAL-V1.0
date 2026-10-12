@@ -8,7 +8,7 @@ return function(ASTRAL)
     local Fsys = require(RS:WaitForChild("Fsys"))
     local ClientData = Fsys.load("ClientData")
     local EquippedPets = Fsys.load("EquippedPets")
-    local S = { Cooldowns = {}, Version = "0.1.5-dev.6.4" }
+    local S = { Cooldowns = {}, Version = "0.1.6-dev.6.5-ds-furniture" }
 
     function S:Log(message)
         print("[ASTRAL NEEDS] " .. tostring(message))
@@ -74,6 +74,55 @@ return function(ASTRAL)
         if not ok or result == false then return false, tostring(result) end
         return true, result
     end
+    -- Dusk & Shine 4.1.3 checks the pet state manager for an active
+    -- UseFurniture state and clears it with PetAPI/ExitFurnitureUseStates.
+    function S:PetInFurnitureState(petUnique)
+        local ok, managers = pcall(function()
+            return ClientData.get("pet_state_managers")
+        end)
+        if not ok or type(managers) ~= "table" then return false end
+
+        local manager = managers[petUnique]
+        if type(manager) ~= "table" then return false end
+        if manager.is_sitting then return true end
+
+        if type(manager.states) == "table" then
+            for _, state in pairs(manager.states) do
+                if type(state) == "table" and state.id == "UseFurniture" then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+    function S:ExitPetFurnitureState(petUnique, attempts, delaySeconds)
+        if not self:PetInFurnitureState(petUnique) then
+            return true, "Already clear"
+        end
+
+        local remote = self:Remote("PetAPI/ExitFurnitureUseStates")
+        if not remote then return false, "ExitFurnitureUseStates unavailable" end
+
+        attempts = attempts or 1
+        delaySeconds = delaySeconds or 0.5
+
+        for attempt = 1, attempts do
+            local ok, why = self:Call(remote, petUnique)
+            if not ok then
+                self:Log("furniture exit attempt " .. tostring(attempt)
+                    .. " failed: " .. tostring(why))
+            end
+
+            task.wait(delaySeconds)
+            if not self:PetInFurnitureState(petUnique) then
+                return true, "Cleared"
+            end
+        end
+
+        return not self:PetInFurnitureState(petUnique), "Furniture state still active"
+    end
+
     function S:MakeHandler(kind, name, priority, action, cooldown)
         local handler = { Id = kind, Name = name, Priority = priority, Version = self.Version }
         function handler:CanRun()
@@ -121,11 +170,35 @@ return function(ASTRAL)
         local remote = self:Remote("HousingAPI/ActivateFurniture")
         if not remote then return false, "ActivateFurniture unavailable" end
 
+        -- D&S performs a stale-state sweep before choosing the next task.
+        -- Do the equivalent for this pet before trying another furniture use.
+        if self:PetInFurnitureState(petUnique) then
+            self:Log(kind .. ": clearing stale furniture state before activation")
+            local cleared, clearReason = self:ExitPetFurnitureState(petUnique, 1, 0.5)
+            self:Log(kind .. ": pre-activation furniture state "
+                .. (cleared and "cleared" or ("still active: " .. tostring(clearReason))))
+        end
+
+        local function finishFurniture(success, why)
+            if success then
+                -- D&S retries ExitFurnitureUseStates after the need disappears,
+                -- up to six times with two-second checks.
+                local cleared, clearReason = self:ExitPetFurnitureState(petUnique, 6, 2)
+                self:Log(kind .. ": post-completion furniture state "
+                    .. (cleared and "cleared" or ("still active: " .. tostring(clearReason))))
+            end
+            return success, why
+        end
+
+        local function waitFurnitureClear(seconds)
+            local success, why = self:WaitClear(kind, petUnique, context, seconds)
+            return finishFurniture(success, why)
+        end
+
         local totalTimeout = timeout or 30
         local deadline = os.clock() + totalTimeout
         local baseline = Game:GetAilmentProgress(kind) or 0
         local maxAttempts = 3
-        local resetAttempted = false
         local candidates = { furniture }
         local seenFurniture = { [furniture.unique] = true }
         local Furniture = ASTRAL.Furniture
@@ -142,7 +215,7 @@ return function(ASTRAL)
             furniture = candidates[math.min(attempt, #candidates)] or furniture
             if context:IsCancelled() then return false, "Cancelled" end
             if Game:GetCurrentPetUnique() ~= petUnique then return false, "Pet changed" end
-            if not Game:PetHasAilment(kind) then return true, "Complete" end
+            if not Game:PetHasAilment(kind) then return finishFurniture(true, "Complete") end
 
             local root, petChar = self:PetRoot()
             if not root or not petChar then return false, "Equipped pet model unavailable" end
@@ -175,7 +248,7 @@ return function(ASTRAL)
             if not callDone then
                 self:Log(kind .. ": activation still pending; waiting on ailment state")
                 local remaining = math.max(0, deadline - os.clock())
-                return self:WaitClear(kind, petUnique, context, remaining)
+                return waitFurnitureClear(remaining)
             end
 
             if not used then
@@ -183,14 +256,14 @@ return function(ASTRAL)
                 self:Log(kind .. ": activation failed; retrying: " .. tostring(err))
                 task.wait(0.75)
             else
-                if not Game:PetHasAilment(kind) then return true, "Complete" end
+                if not Game:PetHasAilment(kind) then return finishFurniture(true, "Complete") end
 
                 -- Successful furniture use often keeps InvokeServer blocked for
                 -- the interaction duration. A silently rejected activation
                 -- returns almost immediately. Only retry the latter case.
                 if callSeconds >= 2.0 then
                     local remaining = math.max(0, deadline - os.clock())
-                    return self:WaitClear(kind, petUnique, context, remaining)
+                    return waitFurnitureClear(remaining)
                 end
 
                 local confirmUntil = math.min(deadline, os.clock() + 2.5)
@@ -210,35 +283,15 @@ return function(ASTRAL)
 
                 if progressed then
                     local remaining = math.max(0, deadline - os.clock())
-                    return self:WaitClear(kind, petUnique, context, remaining)
+                    return waitFurnitureClear(remaining)
                 end
 
                 if attempt < maxAttempts and os.clock() < deadline then
-                    -- Manual recovery test: removing and re-equipping the same
-                    -- pet restored Sleepy progress after furniture rejected it.
-                    -- Try once per ailment run; do not switch to another pet.
-                    if not resetAttempted and ASTRAL.Pets then
-                        resetAttempted = true
-                        self:Log(kind .. ": resetting pet after rejected furniture activation")
-                        local resetOk, resetReason = ASTRAL.Pets:ResetFurnitureInteraction(petUnique)
-                        self:Log(kind .. ": pet reset " .. (resetOk and "confirmed" or
-                            ("not confirmed: " .. tostring(resetReason))))
-                        if resetOk then
-                            -- Allow the newly equipped pet's character to spawn
-                            -- before using its root CFrame on the next attempt.
-                            local readyUntil = math.min(deadline, os.clock() + 3)
-                            while os.clock() < readyUntil do
-                                if context:IsCancelled() then return false, "Cancelled" end
-                                if Game:GetCurrentPetUnique() ~= petUnique then
-                                    return false, "Pet changed after reset"
-                                end
-                                if self:PetRoot() then break end
-                                task.wait(0.2)
-                            end
-                            -- Manual recovery naturally had a short human delay.
-                            -- Give server-side interaction state time to settle.
-                            if os.clock() + 1.0 < deadline then task.wait(1.0) end
-                        end
+                    -- D&S clears the server-side furniture state instead of
+                    -- unequipping/re-equipping the pet.
+                    if self:PetInFurnitureState(petUnique) then
+                        self:Log(kind .. ": clearing furniture state before retry")
+                        self:ExitPetFurnitureState(petUnique, 1, 0.5)
                     end
                     local nextFurniture = candidates[math.min(attempt + 1, #candidates)]
                     if nextFurniture and nextFurniture.unique ~= furniture.unique then
@@ -255,7 +308,7 @@ return function(ASTRAL)
 
         local remaining = math.max(0, deadline - os.clock())
         if remaining > 0 then
-            return self:WaitClear(kind, petUnique, context, remaining)
+            return waitFurnitureClear(remaining)
         end
         return not Game:PetHasAilment(kind), "Timed out"
     end
