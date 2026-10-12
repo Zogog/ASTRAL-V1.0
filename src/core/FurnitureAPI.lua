@@ -7,7 +7,7 @@ return function(ASTRAL)
     local ClientData = require(ReplicatedStorage:WaitForChild("Fsys")).load("ClientData")
 
     local Furniture = {
-        Version = "0.1.1-dev.5.1",
+        Version = "0.1.2-dev.6",
         MaxAutoSlot = 20,
         Slots = {},
         Scanned = {},
@@ -157,6 +157,48 @@ return function(ASTRAL)
             print(string.format("[ASTRAL FURNITURE] matched %s in house slot %d -> %s", best.id, best.slot, best.unique))
             return best
         end
+
+        -- A house slot can transiently return unavailable while housing data is
+        -- still settling. Do not let that first miss poison the cache for the
+        -- whole ASTRAL session: retry previously unavailable candidate slots
+        -- once when an exact requested item was not found.
+        local retried = 0
+        for _, slot in ipairs(self:CandidateSlots()) do
+            if self.Scanned[slot] and not self.Slots[slot] then
+                retried += 1
+                self:ScanSlot(slot, true)
+                local candidate, candidateRank = bestKnown()
+                if candidate and (not bestRank or candidateRank < bestRank) then
+                    best, bestRank = candidate, candidateRank
+                end
+                if bestRank == 1 then break end
+            end
+        end
+
+        if best then
+            print(string.format("[ASTRAL FURNITURE] matched %s in house slot %d -> %s after unavailable-slot retry", best.id, best.slot, best.unique))
+            return best
+        end
+
+        local visible = {}
+        for _, slot in ipairs(self.DiscoveredSlots) do
+            local snapshot = self.Slots[slot]
+            if snapshot then
+                for _, record in ipairs(snapshot.records) do
+                    local id = normalise(record.id)
+                    if id:find("bed", 1, true) or id:find("crib", 1, true) then
+                        table.insert(visible, string.format("%s@%d", record.id, slot))
+                    end
+                end
+            end
+        end
+        print(string.format(
+            "[ASTRAL FURNITURE] exact lookup failed after retrying %d unavailable slot(s); discovered slots=[%s]; bed/crib ids=[%s]",
+            retried,
+            table.concat(self.DiscoveredSlots, ","),
+            table.concat(visible, ",")
+        ))
+
         return nil, "Required furniture not found: " .. table.concat(ids, ", ")
     end
 
