@@ -54,3 +54,12 @@ On boot, confirm all required modules load and all 18 ailment registrations appe
 Furniture-based needs now use `src/core/FurnitureAPI.lua`. It lazily probes the local player's own house slots through `HousingAPI/GetFurnitureWithinHouse`, caches valid furniture records, and stops once the requested furniture is found. An explicit `ASTRAL.Config.HouseSlot` is still honoured first but is no longer required.
 
 Shared by Sleepy, Dirty, Toilet, Bored, Hungry and Thirsty. No house teleport is required for discovery.
+
+
+## dev.6 Pet Queue
+
+ASTRAL now includes a shared `src/core/PetAPI.lua` and the first implemented Pets module at `src/modules/pets/PetQueue.lua`.
+
+Pet Queue v0.1 safely progresses ordinary non-egg inventory pets toward Full Grown. When the equipped pet is Full Grown, it selects the most-developed eligible pet (highest age, then XP), equips it through the controlled `ToolAPI/Equip` path, and lets Pet Autofarm continue progression. Pets assigned to Pet Pens are reserved and eggs are left to the future Egg Manager.
+
+This first pass intentionally does not spend Age-Up Potions, create Neons, hatch eggs, or alter Pet Pen assignments.
