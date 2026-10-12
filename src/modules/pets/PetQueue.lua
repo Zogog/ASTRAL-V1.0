@@ -9,7 +9,7 @@ return function(ASTRAL)
         Name = "Pet Queue",
         Page = "Pets",
         Description = "Grow All or build a manual pet queue; switch after Full Grown.",
-        Version = "0.2.1-dev.6.6-queue-ui",
+        Version = "0.2.2-dev.6.6.2-ui-cache",
         Implemented = true,
         Enabled = false,
         Busy = false,
@@ -21,6 +21,7 @@ return function(ASTRAL)
         Mode = "grow_all",
         ManualOrder = {},
         QueueList = {},
+        EligibleList = {},
         InventoryStats = {},
         LastMessage = "Off",
     }
@@ -74,6 +75,7 @@ return function(ASTRAL)
         end
 
         self.Current = current
+        self.EligibleList = eligible
         self.QueueList = candidates
         self.InventoryStats = stats
         self.Next = candidates[1]
@@ -81,10 +83,9 @@ return function(ASTRAL)
         return current, candidates
     end
 
-    function Queue:GetQueue()
-        self:Snapshot()
+    local function copyPetList(source)
         local result = {}
-        for i, pet in ipairs(self.QueueList) do
+        for i, pet in ipairs(source or {}) do
             result[i] = {
                 unique = pet.unique,
                 name = pet.name,
@@ -97,11 +98,15 @@ return function(ASTRAL)
         return result
     end
 
+    -- UI-facing getters are cache-only by design. Calling Adopt Me/Fsys
+    -- inventory APIs from the GUI refresh thread can alter executor thread
+    -- capability and make subsequent Instance access fail.
+    function Queue:GetQueue()
+        return copyPetList(self.QueueList)
+    end
+
     function Queue:GetEligiblePets()
-        local current = Pets:GetCurrent()
-        return Pets:GetGrowablePets({
-            currentUnique = current and current.unique or nil,
-        })
+        return copyPetList(self.EligibleList)
     end
 
     function Queue:SetMode(mode)
