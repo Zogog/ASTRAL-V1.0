@@ -8,7 +8,7 @@ return function(ASTRAL)
     local Fsys = require(RS:WaitForChild("Fsys"))
     local ClientData = Fsys.load("ClientData")
     local EquippedPets = Fsys.load("EquippedPets")
-    local S = { Cooldowns = {}, Version = "0.1.4-dev.6.3" }
+    local S = { Cooldowns = {}, Version = "0.1.5-dev.6.4" }
 
     function S:Log(message)
         print("[ASTRAL NEEDS] " .. tostring(message))
@@ -153,9 +153,31 @@ return function(ASTRAL)
                 .. " / " .. tostring(interaction or "UseBlock") .. suffix)
 
             local callStarted = os.clock()
-            local used, err = self:Call(remote, Player, furniture.unique,
-                interaction or "UseBlock", { cframe = root.CFrame }, petChar)
+            local callDone, used, err = false, false, nil
+            task.spawn(function()
+                used, err = self:Call(remote, Player, furniture.unique,
+                    interaction or "UseBlock", { cframe = root.CFrame }, petChar)
+                callDone = true
+            end)
+
+            -- ActivateFurniture may remain blocked long after the ailment should
+            -- have timed out. Never let that InvokeServer pin the Autofarm
+            -- scheduler: observe it for two seconds, then wait on ailment state
+            -- only, bounded by this handler's existing deadline.
+            local observeUntil = math.min(deadline, callStarted + 2.0)
+            while not callDone and os.clock() < observeUntil do
+                local status, why = self:Check(kind, petUnique, context)
+                if status ~= nil then return status, why end
+                task.wait(0.1)
+            end
+
             local callSeconds = os.clock() - callStarted
+            if not callDone then
+                self:Log(kind .. ": activation still pending; waiting on ailment state")
+                local remaining = math.max(0, deadline - os.clock())
+                return self:WaitClear(kind, petUnique, context, remaining)
+            end
+
             if not used then
                 if attempt >= maxAttempts then return false, err end
                 self:Log(kind .. ": activation failed; retrying: " .. tostring(err))
@@ -213,6 +235,9 @@ return function(ASTRAL)
                                 if self:PetRoot() then break end
                                 task.wait(0.2)
                             end
+                            -- Manual recovery naturally had a short human delay.
+                            -- Give server-side interaction state time to settle.
+                            if os.clock() + 1.0 < deadline then task.wait(1.0) end
                         end
                     end
                     local nextFurniture = candidates[math.min(attempt + 1, #candidates)]
