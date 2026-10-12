@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.6.7 — Pet Pens restored
+    ASTRAL 1.0.0-dev.6.8 — Pet Pens v2 ETA
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6.7-pet-pens",
-    Build = "Pet Queue v2 + restored Auto Pet Pens",
+    Version = "1.0.0-dev.6.8-pet-pens-v2",
+    Build = "Pet Pens v2 UI + Full Grown ETA + measured XP rate",
 
     Repository = {
         Owner = "Zogog",
