@@ -12,7 +12,7 @@ return function(ASTRAL)
     local SharedConstants = load("SharedConstants")
 
     local PetAPI = {
-        Version = "0.1.2-dev.6.8-growth-eta",
+        Version = "0.1.3-dev.6.9.3-normal-first",
     }
 
     local function properties(item)
@@ -62,6 +62,10 @@ return function(ASTRAL)
         local xp = tonumber(props.xp) or 0
         local friendship = tonumber(props.friendship_level) or 0
         local isEgg = definition and definition.is_egg == true or false
+        -- Adopt Me has used both legacy and current variant property names.
+        -- D&S 4.1.3 confirms these are the authoritative inventory flags.
+        local isNeon = props.neon == true or props.neon == 1 or props.is_neon == true
+        local isMega = props.mega_neon == true or props.mega_neon == 1 or props.is_mega == true
         local targetXP, mode
 
         if isEgg then
@@ -92,6 +96,9 @@ return function(ASTRAL)
             targetXP = targetXP,
             mode = mode,
             isEgg = isEgg,
+            isNeon = isNeon,
+            isMega = isMega,
+            variant = isMega and "MEGA" or (isNeon and "NEON" or "NORMAL"),
             isFullGrown = age ~= nil and age >= 6,
         }
     end
@@ -179,8 +186,18 @@ return function(ASTRAL)
             end
         end
 
-        -- Deterministic default queue: finish the most-developed pets first.
+        -- Generic progression owns normal pets first. Neon/Mega pets are
+        -- preserved for the Neon Factory while any normal growable pet exists.
+        -- If normals are exhausted, Neon becomes the fallback, then Mega.
+        local function variantRank(pet)
+            if pet.isMega then return 2 end
+            if pet.isNeon then return 1 end
+            return 0
+        end
+
         table.sort(result, function(a, b)
+            local aVariant, bVariant = variantRank(a), variantRank(b)
+            if aVariant ~= bVariant then return aVariant < bVariant end
             if a.age == b.age then
                 if a.xp == b.xp then return tostring(a.unique) < tostring(b.unique) end
                 return a.xp > b.xp
