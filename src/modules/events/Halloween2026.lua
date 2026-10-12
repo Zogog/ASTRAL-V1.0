@@ -25,7 +25,7 @@ return function(ASTRAL)
         Name = "Halloween 2026",
         Page = "Events",
         Description = "Ghost Gallery, Crypt, Twigs, Candy Corn, quests, event shop and session statistics.",
-        Version = "0.1.4-dev.6.11.4-char-wrapper-location",
+        Version = "0.1.5-dev.6.11.5-crypt-equip-remote",
         Implemented = true,
         Enabled = false,
         Busy = false,
@@ -480,7 +480,7 @@ return function(ASTRAL)
     local function equipRustyKey()
         if equippedRustyKey() then return true end
         local equip = getRemote("ToolAPI/Equip") or getRemote("InventoryAPI/Equip")
-        local legacyEquip = getRemote("EquipAPI/Equip")
+        local legacyEquip = getRemote("ToolAPI/Equip")
         local unique = findKindUniques("halloween_2026_rusty_key")[1]
         if not unique then return false end
 
