@@ -5,8 +5,12 @@ return function(ASTRAL)
     local lastPurchase = {}
 
     local function log(message)
-        if ASTRAL.State then ASTRAL.State:Log("Feeding: " .. message) end
-        print("[ASTRAL FEEDING] " .. message)
+        local text = "Feeding: " .. tostring(message)
+        -- Never allow diagnostics/UI refresh to abort an ailment handler.
+        if ASTRAL.State then
+            pcall(function() ASTRAL.State:Log(text) end)
+        end
+        print("[ASTRAL FEEDING] " .. tostring(message))
     end
 
     local function waitUntilClear(kind, petUnique, context, seconds)
@@ -44,7 +48,7 @@ return function(ASTRAL)
         local handler = {
             Id = kind,
             Name = kind == "hungry" and "Hungry" or "Thirsty",
-            Version = "0.1.0-dev.4",
+            Version = "0.1.1-dev.4.1",
             Priority = priority,
         }
         function handler:CanRun()
