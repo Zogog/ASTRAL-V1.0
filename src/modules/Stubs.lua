@@ -1,7 +1,6 @@
 return function(ASTRAL)
     local definitions = {
         {"baby_farm",      "Baby Autofarm",   "Autofarm",     "Optional baby-needs automation."},
-        {"pet_queue",      "Pet Queue",       "Pets",         "Shared progression and pet-selection queue."},
         {"friendship",     "Friendship",      "Pets",         "Full-grown friendship and Age-Up Potion progression."},
         {"potions",        "Potion Feeder",   "Pets",         "Controlled Age-Up Potion usage."},
         {"eggs",           "Egg Manager",     "Eggs",         "Purchase, equip, hatch and target management."},
