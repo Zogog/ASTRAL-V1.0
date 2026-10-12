@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.6.8.1 — Bored Playground hotfix
+    ASTRAL 1.0.0-dev.6.9 — Egg Manager v1
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
