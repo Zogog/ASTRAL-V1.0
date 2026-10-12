@@ -6,7 +6,7 @@ return function(ASTRAL)
     local player = Players.LocalPlayer
 
     local UI = {
-        Version = "0.3.0-dev.6.8-pet-pens-v2",
+        Version = "0.4.0-dev.6.9-egg-manager",
         Pages = {},
         Nav = {},
         ModuleCards = {},
@@ -790,6 +790,185 @@ return function(ASTRAL)
         end
     end
 
+    -- Egg Manager v1 dashboard. Like the other detailed panels, it consumes
+    -- cache-only getters so UI refresh never reaches into ClientData/Fsys.
+    local eggManager = ASTRAL.Modules:Get("eggs")
+    if eggManager and UI.Pages.Eggs then
+        local eggPanel = new("Frame", {
+            Name = "EggManagerV1",
+            Size = UDim2.new(1, 0, 0, 328),
+            BackgroundColor3 = C.panel,
+            BorderSizePixel = 0,
+            Parent = UI.Pages.Eggs,
+        })
+        corner(eggPanel, 10)
+        stroke(eggPanel, 0.55)
+
+        new("TextLabel", {
+            Text = "Egg Manager v1  |  HATCH ALL",
+            Position = UDim2.fromOffset(14, 10),
+            Size = UDim2.new(1, -28, 0, 22),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamSemibold,
+            TextSize = 14,
+            TextColor3 = C.text,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = eggPanel,
+        })
+
+        local eggStatus = new("TextLabel", {
+            Text = "Egg Manager off",
+            Position = UDim2.fromOffset(14, 36),
+            Size = UDim2.new(1, -28, 0, 20),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.Gotham,
+            TextSize = 10,
+            TextColor3 = C.sub,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = eggPanel,
+        })
+
+        local currentEgg = new("TextLabel", {
+            Text = "Current: none",
+            Position = UDim2.fromOffset(14, 62),
+            Size = UDim2.new(1, -28, 0, 38),
+            BackgroundColor3 = C.bg,
+            BorderSizePixel = 0,
+            Font = Enum.Font.GothamSemibold,
+            TextSize = 11,
+            TextColor3 = C.text,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = eggPanel,
+        })
+        corner(currentEgg, 7)
+        new("UIPadding", {
+            PaddingLeft = UDim.new(0, 10),
+            PaddingRight = UDim.new(0, 10),
+            Parent = currentEgg,
+        })
+
+        new("TextLabel", {
+            Text = "OWNED EGGS",
+            Position = UDim2.fromOffset(14, 108),
+            Size = UDim2.new(0.5, -20, 0, 18),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamBold,
+            TextSize = 10,
+            TextColor3 = C.sub,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = eggPanel,
+        })
+
+        new("TextLabel", {
+            Text = "RECENT HATCHES",
+            Position = UDim2.new(0.5, 7, 0, 108),
+            Size = UDim2.new(0.5, -21, 0, 18),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamBold,
+            TextSize = 10,
+            TextColor3 = C.sub,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = eggPanel,
+        })
+
+        local kindLabels = {}
+        local historyLabels = {}
+        for i = 1, 6 do
+            kindLabels[i] = new("TextLabel", {
+                Text = i == 1 and "Waiting for inventory scan..." or "",
+                Position = UDim2.fromOffset(14, 128 + (i - 1) * 28),
+                Size = UDim2.new(0.5, -21, 0, 24),
+                BackgroundColor3 = C.bg,
+                BackgroundTransparency = 0.2,
+                BorderSizePixel = 0,
+                Font = Enum.Font.Gotham,
+                TextSize = 10,
+                TextColor3 = C.sub,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = eggPanel,
+            })
+            corner(kindLabels[i], 5)
+            new("UIPadding", {
+                PaddingLeft = UDim.new(0, 8),
+                PaddingRight = UDim.new(0, 8),
+                Parent = kindLabels[i],
+            })
+        end
+
+        for i = 1, 6 do
+            historyLabels[i] = new("TextLabel", {
+                Text = i == 1 and "No hatches this session" or "",
+                Position = UDim2.new(0.5, 7, 0, 128 + (i - 1) * 28),
+                Size = UDim2.new(0.5, -21, 0, 24),
+                BackgroundColor3 = C.bg,
+                BackgroundTransparency = 0.2,
+                BorderSizePixel = 0,
+                Font = Enum.Font.Gotham,
+                TextSize = 10,
+                TextColor3 = C.sub,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = eggPanel,
+            })
+            corner(historyLabels[i], 5)
+            new("UIPadding", {
+                PaddingLeft = UDim.new(0, 8),
+                PaddingRight = UDim.new(0, 8),
+                Parent = historyLabels[i],
+            })
+        end
+
+        function UI:RefreshEggManager()
+            local now = os.clock()
+            if self._EggRefreshAt and now < self._EggRefreshAt then return end
+            self._EggRefreshAt = now + 0.35
+
+            local info = eggManager:GetStatus()
+            local kinds = eggManager:GetEggKinds()
+            local history = eggManager:GetHistory()
+
+            eggStatus.Text = string.format(
+                "%s  |  %d owned  |  %d hatched this session  |  %s",
+                info.enabled and "ACTIVE" or "OFF",
+                info.totalEggs or 0,
+                info.sessionHatched or 0,
+                tostring(info.message or "")
+            )
+            eggStatus.TextColor3 = info.enabled and C.green or C.sub
+
+            if info.current then
+                local progressText = ""
+                if info.current.targetXP and info.current.targetXP > 0 then
+                    progressText = string.format(
+                        "  |  %.0f%% (%s/%s XP)",
+                        math.clamp((info.current.xp or 0) / info.current.targetXP * 100, 0, 100),
+                        tostring(info.current.xp or 0),
+                        tostring(info.current.targetXP)
+                    )
+                end
+                currentEgg.Text = "Current:  " .. tostring(info.current.name or info.current.kind or "Egg") .. progressText
+            else
+                currentEgg.Text = "Current:  none"
+            end
+
+            for i = 1, 6 do
+                local entry = kinds[i]
+                kindLabels[i].Text = entry
+                    and string.format("%s   x%d", tostring(entry.name or entry.kind or "Egg"), entry.count or 0)
+                    or ""
+            end
+            if #kinds == 0 then kindLabels[1].Text = "No eligible owned eggs" end
+
+            for i = 1, 6 do
+                local entry = history[i]
+                historyLabels[i].Text = entry
+                    and (tostring(entry.eggName or entry.eggKind or "Egg")
+                        .. "  ->  " .. tostring(entry.petName or entry.petKind or "Pet"))
+                    or ""
+            end
+            if #history == 0 then historyLabels[1].Text = "No hatches this session" end
+        end
+    end
+
     -- Pet Pens v2 dashboard. All values come from PetPens.lua's cached
     -- plain-Lua snapshots; this UI never calls ClientData/Fsys itself.
     local petPens = ASTRAL.Modules:Get("pet_pens")
@@ -1090,6 +1269,11 @@ return function(ASTRAL)
         if self.RefreshPetPens then
             local ok, err = pcall(function() self:RefreshPetPens() end)
             if not ok then warn("[ASTRAL UI] Pet Pens refresh:", err) end
+        end
+
+        if self.RefreshEggManager then
+            local ok, err = pcall(function() self:RefreshEggManager() end)
+            if not ok then warn("[ASTRAL UI] Egg Manager refresh:", err) end
         end
     end
 
