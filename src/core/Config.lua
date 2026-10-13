@@ -20,7 +20,9 @@ return function(ASTRAL)
     }
 
     local rootFolder = "ASTRAL"
-    Config.PersistencePath = rootFolder .. "/settings_" .. tostring(player.UserId) .. ".json"
+    Config.PersistencePath = type(makefolder) == "function"
+        and (rootFolder .. "/settings_" .. tostring(player.UserId) .. ".json")
+        or ("ASTRAL_settings_" .. tostring(player.UserId) .. ".json")
 
     local function copy(value, depth)
         depth = depth or 0
