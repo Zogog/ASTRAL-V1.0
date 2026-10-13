@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.6.11.8 — Sleepy Cross-House Fallback
+    ASTRAL 1.0.0-dev.6.11.9 — Campsite Sleep + Shower Fallbacks
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6.11.8-sleep-fallback",
-    Build = "Halloween 2026 suite + mobile window clamp + Sleepy fallback",
+    Version = "1.0.0-dev.6.11.9-campsite-fallbacks",
+    Build = "Halloween 2026 suite + mobile window clamp + campsite ailment fallbacks",
 
     Repository = {
         Owner = "Zogog",
