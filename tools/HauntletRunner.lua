@@ -1,4 +1,4 @@
--- ASTRAL Hauntlet 2 standalone runner v0.3.1
+-- ASTRAL Hauntlet 2 standalone runner v0.3.2
 -- Autonomous door runner with inter-floor handoff. Starts only after the normal Hauntlet client is participating.
 -- Uses the live HauntletMinigameClient state and its own message_server("try_pick_door", index)
 -- path discovered from the normal door callbacks. Adds one-shot verified item use.
@@ -21,7 +21,7 @@ local function log(...)
     for i = 1, select("#", ...) do
         out[i] = tostring(select(i, ...))
     end
-    print("[ASTRAL HAUNTLET RUN v0.3.1] " .. table.concat(out, " "))
+    print("[ASTRAL HAUNTLET RUN v0.3.2] " .. table.concat(out, " "))
 end
 
 local function getClient()
@@ -332,6 +332,46 @@ local function useSurvivalItems(run, roomIndex)
     -- left untouched until we verify their precise client interaction/results.
 end
 
+-- Keep the real character physically with the route. Remote door selection can
+-- advance authoritative room state without walking the avatar, which otherwise
+-- leaves the player back at room 1 when the Nexus appears.
+local function followDoor(choice)
+    local character = player.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    local door = choice and choice.door
+    if not root or not door or not door.Parent then
+        return false, "character/root/door unavailable"
+    end
+
+    local ok, pivot = pcall(function()
+        if door:IsA("Model") then
+            return door:GetPivot()
+        elseif door:IsA("BasePart") then
+            return door.CFrame
+        end
+        local part = door:FindFirstChildWhichIsA("BasePart", true)
+        return part and part.CFrame
+    end)
+    if not ok or typeof(pivot) ~= "CFrame" then
+        return false, "door pivot unavailable"
+    end
+
+    -- Put the avatar just above the selected doorway. We deliberately do not
+    -- guess which local Z direction is "through" the door; reaching the doorway
+    -- is enough to keep the player alongside the generated route and avoids
+    -- throwing them into geometry.
+    local target = pivot + Vector3.new(0, 3, 0)
+    local moved, err = pcall(function()
+        character:PivotTo(target)
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+    end)
+    if not moved then
+        return false, tostring(err)
+    end
+    return true, string.format("%.1f,%.1f,%.1f", target.X, target.Y, target.Z)
+end
+
 local function sendDoorChoice(run, index)
     if type(run.message_server) ~= "function" then
         return false, "live run has no message_server function"
@@ -380,6 +420,7 @@ end
 log("ARMED - autonomous Hauntlet with survival item use")
 log("POLICY gold heart early, red heart when damaged, ghost heart when vulnerable")
 log("ITEM SAFETY confirms inventory OR health-state effects; no repeated max-heart use")
+log("MOVEMENT follows each selected doorway so the avatar reaches the Nexus with the route")
 log("Start Hauntlet normally; this script takes over once room choices are live.")
 
 local attached = false
@@ -455,6 +496,13 @@ while alive() and task.wait(0.05) do
             end
 
             log("PICK", choice.index .. ":" .. choice.kind, "score=" .. tostring(choice.score))
+            local followed, followResult = followDoor(choice)
+            if followed then
+                log("FOLLOW", "door=" .. choice.index, "position=" .. followResult)
+            else
+                log("FOLLOW SKIP", followResult)
+            end
+            task.wait(0.05)
             local sent, result = sendDoorChoice(run, choice.index)
             if not sent then
                 log("STOP - try_pick_door failed:", result)
