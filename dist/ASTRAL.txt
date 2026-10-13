@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.6.12.2 — Integrated Hauntlet 2 v0.6
+    ASTRAL 1.0.0-dev.6.12.3 — Persistent settings
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6.12.2-hauntlet-v0.6",
-    Build = "Long-session automation + integrated Hauntlet 2 v0.6 + Lures",
+    Version = "1.0.0-dev.6.12.3-persistent-settings",
+    Build = "Long-session automation + persistent settings + Hauntlet 2 + Lures",
 
     Repository = {
         Owner = "Zogog",
