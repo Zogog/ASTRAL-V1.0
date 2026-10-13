@@ -44,7 +44,11 @@ return function(ASTRAL)
         end
 
         if module.SetEnabled then
-            return module:SetEnabled(enabled)
+            local ok, reason = module:SetEnabled(enabled)
+            if ok and ASTRAL.Config and ASTRAL.Config.PersistenceEnabled then
+                pcall(function() ASTRAL.Config:Save() end)
+            end
+            return ok, reason
         end
 
         return false, "Module has no enable handler"
