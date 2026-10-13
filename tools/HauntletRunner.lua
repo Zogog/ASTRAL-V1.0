@@ -1,4 +1,4 @@
--- ASTRAL Hauntlet 2 standalone runner v0.3
+-- ASTRAL Hauntlet 2 standalone runner v0.3.1
 -- Autonomous door runner with inter-floor handoff. Starts only after the normal Hauntlet client is participating.
 -- Uses the live HauntletMinigameClient state and its own message_server("try_pick_door", index)
 -- path discovered from the normal door callbacks. Adds one-shot verified item use.
@@ -21,7 +21,7 @@ local function log(...)
     for i = 1, select("#", ...) do
         out[i] = tostring(select(i, ...))
     end
-    print("[ASTRAL HAUNTLET RUN v0.3] " .. table.concat(out, " "))
+    print("[ASTRAL HAUNTLET RUN v0.3.1] " .. table.concat(out, " "))
 end
 
 local function getClient()
@@ -178,17 +178,18 @@ local function chooseDoor(run)
         local legal, reason = isLegal(run, runner, choice)
         local profile = DOORS[choice.kind]
         local score = profile and profile.score or 9999
-        -- Official 2026 notes describe keyed paths as safer/richer. Spend keys
-        -- when stocked; keep the last grey key in reserve where possible.
+        -- Locked/Security/Golden doors have a separate lock-removal flow.
+        -- Direct try_pick_door is not reliably accepted while locks remain, so
+        -- keep them behind ordinary doors until that interaction is automated.
         if legal and choice.kind == "locked" then
-            score = inventoryCount(run, "key") >= 2 and 65 or 105
+            score = 190
         elseif legal and choice.kind == "security" then
-            score = inventoryCount(run, "key") >= 3 and 75 or 135
+            score = 230
         elseif legal and choice.kind == "gold_locked" then
-            score = 50
+            score = 260
         elseif legal and choice.kind == "bouncy" then
-            -- Bounce may redirect the door choice: don't treat low ghost
-            -- weight alone as proof that this is safer than wooden.
+            -- Bounce can redirect the choice; do not treat ghost weight alone
+            -- as proof that it is safer than an ordinary wooden door.
             score = 110
         end
         summary[#summary + 1] = string.format(
@@ -219,6 +220,7 @@ end
 -- item requests for this run if the first one does not change authoritative state.
 local itemAutoDisabled = false
 local itemAttempted = {}
+local itemEffectConfirmed = {}
 local function healthString(runner)
     if not runner then return "?/?,temp=?" end
     return tostring(runner.health) .. "/" .. tostring(runner.max_health)
@@ -252,19 +254,37 @@ local function useItemOnce(run, kind, roomIndex)
         return false
     end
 
+    local beforeRunner = runner
+    local beforeHealth = beforeRunner and tonumber(beforeRunner.health)
+    local beforeMax = beforeRunner and tonumber(beforeRunner.max_health)
+    local beforeTemp = beforeRunner and tonumber(beforeRunner.temp_health) or 0
+
     local started = os.clock()
     while alive() and run.is_participating and os.clock() - started < 1.5 do
         local after = inventoryCount(run, kind)
-        if after < before then
-            log("ITEM CONFIRMED", kind, "count=" .. before .. "->" .. after,
-                "hp=" .. healthString(getRunner(run)))
+        local now = getRunner(run)
+        local nowHealth = now and tonumber(now.health)
+        local nowMax = now and tonumber(now.max_health)
+        local nowTemp = now and tonumber(now.temp_health) or 0
+
+        local stateEffect =
+            (kind == "gold_potion" and beforeMax and nowMax and nowMax > beforeMax)
+            or (kind == "red_potion" and beforeHealth and nowHealth and nowHealth > beforeHealth)
+            or (kind == "ghost_potion" and nowTemp > beforeTemp)
+
+        if after < before or stateEffect then
+            itemEffectConfirmed[kind] = true
+            log("ITEM CONFIRMED", kind,
+                "count=" .. before .. "->" .. after,
+                "state_effect=" .. tostring(stateEffect),
+                "hp=" .. healthString(now))
             return true
         end
         task.wait(0.05)
     end
 
     log("ITEM UNCONFIRMED", kind,
-        "no inventory decrement after 1.5s; disabling auto-items for this run")
+        "no inventory or health-state confirmation after 1.5s; disabling auto-items for this run")
     itemAutoDisabled = true
     return false
 end
@@ -279,7 +299,8 @@ local function useSurvivalItems(run, roomIndex)
 
     -- A Golden Heart Potion increases max red hearts. The 2026 game notes say
     -- it does not refill previously missing hearts. Use early to gain capacity.
-    if inventoryCount(run, "gold_potion") > 0 then
+    if inventoryCount(run, "gold_potion") > 0
+        and not itemEffectConfirmed.gold_potion then
         useItemOnce(run, "gold_potion", roomIndex)
     end
 
@@ -358,7 +379,7 @@ end
 
 log("ARMED - autonomous Hauntlet with survival item use")
 log("POLICY gold heart early, red heart when damaged, ghost heart when vulnerable")
-log("ITEM SAFETY one request per item/room; disable items on first unconfirmed response")
+log("ITEM SAFETY confirms inventory OR health-state effects; no repeated max-heart use")
 log("Start Hauntlet normally; this script takes over once room choices are live.")
 
 local attached = false
@@ -377,6 +398,7 @@ while alive() and task.wait(0.05) do
             waitingForInterfloor = false
             itemAutoDisabled = false
             itemAttempted = {}
+            itemEffectConfirmed = {}
             log("ATTACHED", tostring(run.minigame_id or "?"))
         end
 
