@@ -546,7 +546,6 @@ while alive() and task.wait(0.05) do
             lastHandledRoom = roomIndex
             log("SPECIAL ROOM WAIT", "room=" .. roomIndex, "no selectable doors exposed yet")
         end
-end
     elseif attached then
         log("RUN ENDED / DETACHED")
         attached = false
