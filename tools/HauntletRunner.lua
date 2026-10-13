@@ -1,4 +1,4 @@
--- ASTRAL Hauntlet 2 standalone runner v0.4.0
+-- ASTRAL Hauntlet 2 standalone runner v0.4.1
 -- Autonomous door + Nexus runner. Starts only after the normal Hauntlet client is participating.
 -- Uses the live HauntletMinigameClient state and its own message_server("try_pick_door", index)
 -- path discovered from the normal door callbacks. Adds one-shot verified item use.
@@ -21,7 +21,7 @@ local function log(...)
     for i = 1, select("#", ...) do
         out[i] = tostring(select(i, ...))
     end
-    print("[ASTRAL HAUNTLET RUN v0.4.0] " .. table.concat(out, " "))
+    print("[ASTRAL HAUNTLET RUN v0.4.1] " .. table.concat(out, " "))
 end
 
 local function getClient()
@@ -97,6 +97,55 @@ local function inventoryString(run)
     end
     return table.concat(out, ",")
 end
+
+-- Nexus choices are authoritative in the started_room payload, but unlike
+-- ordinary rooms they are not exposed as physical children of current_room.Doors.
+-- Passively cache that payload so Room 10/20/etc can be selected immediately.
+local nexusSnapshot = nil
+local messageClientConnection = nil
+
+local function startNexusCapture()
+    local ok, remote = pcall(function()
+        return game:GetService("ReplicatedStorage").API["MinigameAPI/MessageClient"]
+    end)
+    if not ok or not remote or not remote:IsA("RemoteEvent") then
+        log("NEXUS CAPTURE unavailable - MessageClient remote not found")
+        return
+    end
+
+    messageClientConnection = remote.OnClientEvent:Connect(function(minigameId, message, roomData)
+        if not alive() or message ~= "started_room" or type(roomData) ~= "table"
+            or roomData.kind ~= "nexus" or type(roomData.doors) ~= "table" then
+            return
+        end
+
+        local choices = {}
+        for index, doorData in ipairs(roomData.doors) do
+            if type(doorData) == "table" then
+                choices[#choices + 1] = {
+                    index = index,
+                    kind = "unknown",
+                    area_kind = tostring(doorData.area_kind or "unknown"),
+                    door = nil,
+                }
+            end
+        end
+
+        nexusSnapshot = {
+            minigame_id = tostring(minigameId),
+            choices = choices,
+            captured_at = os.clock(),
+        }
+
+        local names = {}
+        for _, choice in ipairs(choices) do
+            names[#names + 1] = tostring(choice.index) .. ":" .. choice.area_kind
+        end
+        log("NEXUS PAYLOAD CAPTURED", table.concat(names, " | "))
+    end)
+end
+
+startNexusCapture()
 
 -- Values observed directly in Halloween 2026 HauntletDoorDB.
 -- Lower ghost weight is treated as safer, with conservative penalties for
@@ -479,6 +528,16 @@ while alive() and task.wait(0.05) do
         local roomIndex = tonumber(run.current_room_index) or 0
         local choices = currentChoices(run)
 
+        -- Nexus room models can have no current_room.Doors children at all.
+        -- Cobalt proved their two choices arrive in started_room instead, so
+        -- substitute the captured authoritative payload for this minigame.
+        if #choices == 0
+            and nexusSnapshot
+            and nexusSnapshot.minigame_id == tostring(run.minigame_id)
+            and os.clock() - nexusSnapshot.captured_at < 35 then
+            choices = nexusSnapshot.choices
+        end
+
         if roomIndex >= 1
             and #choices > 0
             and run.selected_door_index == nil
@@ -518,11 +577,19 @@ while alive() and task.wait(0.05) do
             log(nexus and "NEXUS PICK" or "PICK",
                 choice.index .. ":" .. label, "score=" .. tostring(choice.score))
 
-            local followed, followResult = followDoor(choice)
-            if followed then
-                log("FOLLOW", "door=" .. choice.index, "position=" .. followResult)
+            if nexus then
+                -- Nexus has no physical Door object in current_room. The previous
+                -- normal-room FOLLOW already keeps us at the front of the route;
+                -- after server selection, the next normal room FOLLOW catches the
+                -- avatar up immediately.
+                log("NEXUS FOLLOW", "server route selection; next room will reposition avatar")
             else
-                log("FOLLOW SKIP", followResult)
+                local followed, followResult = followDoor(choice)
+                if followed then
+                    log("FOLLOW", "door=" .. choice.index, "position=" .. followResult)
+                else
+                    log("FOLLOW SKIP", followResult)
+                end
             end
             task.wait(0.05)
 
@@ -537,6 +604,9 @@ while alive() and task.wait(0.05) do
             local progressed, outcome = waitForOutcome(run, roomIndex, choice.index)
             if progressed then
                 log(nexus and "NEXUS RESULT" or "RESULT", outcome)
+                if nexus then
+                    nexusSnapshot = nil
+                end
             else
                 log("STOP -", outcome, "| no retry sent")
                 stoppedForError = true
@@ -562,9 +632,15 @@ else
     log("DONE")
 end
 
--- Explicit teardown. There are no event connections or spawned worker loops in
--- this standalone runner; clearing the singleton token removes its final global
--- reference as well. After this point this copy has no code left executing.
+-- Explicit teardown, including the passive Nexus payload listener.
+if messageClientConnection then
+    pcall(function()
+        messageClientConnection:Disconnect()
+    end)
+    messageClientConnection = nil
+end
+nexusSnapshot = nil
+
 if env.ASTRAL_HAUNTLET_RUNNER_TOKEN == TOKEN then
     env.ASTRAL_HAUNTLET_RUNNER_TOKEN = nil
 end
