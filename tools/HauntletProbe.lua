@@ -1,111 +1,114 @@
--- ASTRAL Hauntlet client probe v0.6 - READ ONLY.
--- Run during Hauntlet. Inspects already-loaded Hauntlet modules and function metadata.
--- Does not invoke game functions/remotes, move the character, or mutate state.
+-- ASTRAL Hauntlet client proto probe v0.7 - READ ONLY.
+-- Run once during Hauntlet. Recursively inspects nested function prototypes for
+-- interaction/message names without invoking gameplay functions.
 
-local RS=game:GetService("ReplicatedStorage")
 local function log(...)
     local a={}
     for i=1,select("#",...) do a[i]=tostring(select(i,...)) end
-    print("[ASTRAL HAUNTLET CLIENT v0.6] "..table.concat(a," "))
+    print("[ASTRAL HAUNTLET PROTO v0.7] "..table.concat(a," "))
 end
 
-local function simple(v)
-    local t=typeof(v)
-    if t=="string" then return string.format("%q",v) end
-    if t=="number" or t=="boolean" or t=="nil" then return tostring(v) end
-    if t=="Instance" then return v:GetFullName() end
-    return "<"..t..">"
-end
+if type(getloadedmodules)~="function" then log("getloadedmodules unavailable") return end
 
-local function functionInfo(fn,path)
-    log("FUNCTION",path)
-    if debug and type(debug.getconstants)=="function" then
-        local ok,vals=pcall(debug.getconstants,fn)
-        if ok and type(vals)=="table" then
-            local out={}
-            for _,v in ipairs(vals) do
-                local t=typeof(v)
-                if t=="string" or t=="number" or t=="boolean" then out[#out+1]=simple(v) end
-            end
-            if #out>0 then log("CONSTANTS",path,table.concat(out," | ")) end
+local target
+local ok,mods=pcall(getloadedmodules)
+if ok then
+    for _,m in ipairs(mods) do
+        if typeof(m)=="Instance" and m:IsA("ModuleScript")
+            and m.Name=="HauntletMinigameClient"
+            and m:GetFullName():find("Halloween2026",1,true) then
+            target=m break
         end
     end
+end
+if not target then log("HauntletMinigameClient not loaded") return end
+
+local rok,client=pcall(require,target)
+if not rok or type(client)~="table" then log("cached require failed",client) return end
+local cls=client.minigame_class
+if type(cls)~="table" then log("minigame_class missing") return end
+
+local names={
+    "define_hotbar_buttons",
+    "doors_opened_msg",
+    "picked_door_msg",
+    "started_room_msg",
+    "door_effect_triggered_msg",
+    "grey_locks_removed_msg",
+    "all_locks_removed_msg",
+    "revealed_ghost_msg",
+    "used_item_msg",
+    "ghosts_dispelled_msg",
+}
+
+local seen={}
+local function constants(fn)
+    if not debug or type(debug.getconstants)~="function" then return {} end
+    local okc,c=pcall(debug.getconstants,fn)
+    if not okc or type(c)~="table" then return {} end
+    local out={}
+    for _,v in ipairs(c) do
+        local t=typeof(v)
+        if t=="string" or t=="number" or t=="boolean" then out[#out+1]=tostring(v) end
+    end
+    return out
+end
+
+local function inspect(fn,path,depth)
+    if type(fn)~="function" or seen[fn] or depth>5 then return end
+    seen[fn]=true
+    local c=constants(fn)
+    log("FN",path,"depth="..depth,"constants="..table.concat(c," | "))
+
     if debug and type(debug.getupvalues)=="function" then
-        local ok,vals=pcall(debug.getupvalues,fn)
-        if ok and type(vals)=="table" then
-            for k,v in pairs(vals) do
-                local t=typeof(v)
-                if t=="string" or t=="number" or t=="boolean" or t=="Instance" then
-                    log("UPVALUE",path,tostring(k),simple(v))
-                elseif t=="table" then
+        local oku,ups=pcall(debug.getupvalues,fn)
+        if oku and type(ups)=="table" then
+            for k,v in pairs(ups) do
+                if type(v)=="function" then
+                    inspect(v,path..".up"..tostring(k),depth+1)
+                elseif type(v)=="table" then
                     local keys={}
-                    for kk in pairs(v) do
-                        if #keys<40 then keys[#keys+1]=tostring(kk) end
-                    end
+                    for kk in pairs(v) do if #keys<80 then keys[#keys+1]=tostring(kk) end end
                     table.sort(keys)
-                    log("UPVALUE_TABLE",path,tostring(k),"keys="..table.concat(keys,","))
+                    local joined=table.concat(keys,",")
+                    if joined:find("message",1,true) or joined:find("inventory",1,true)
+                        or joined:find("selected",1,true) or joined:find("interaction",1,true)
+                        or joined:find("door",1,true) or joined:find("runner",1,true) then
+                        log("TABLE",path..".up"..tostring(k),"keys="..joined)
+                    end
                 end
             end
         end
     end
+
+    if debug and type(debug.getprotos)=="function" then
+        local okp,protos=pcall(debug.getprotos,fn)
+        if okp and type(protos)=="table" then
+            for i,p in ipairs(protos) do inspect(p,path..".proto"..i,depth+1) end
+        end
+    elseif depth==0 then
+        log("debug.getprotos unavailable")
+    end
 end
 
-local function dumpSurface(v,path,depth,seen)
-    depth=depth or 0
-    seen=seen or {}
-    local t=typeof(v)
-    if t=="function" then functionInfo(v,path); return end
-    if t~="table" then log("VALUE",path,simple(v)); return end
-    if seen[v] then return end
-    seen[v]=true
-    if depth>3 then return end
-    local keys={}
-    for k in pairs(v) do keys[#keys+1]=k end
-    table.sort(keys,function(a,b) return tostring(a)<tostring(b) end)
-    log("TABLE",path,"entries="..#keys)
-    for i,k in ipairs(keys) do
-        if i>160 then break end
-        local x=v[k]
-        local xt=typeof(x)
-        if xt=="function" then
-            functionInfo(x,path.."."..tostring(k))
-        elseif xt=="table" then
-            dumpSurface(x,path.."."..tostring(k),depth+1,seen)
-        elseif xt=="string" or xt=="number" or xt=="boolean" or xt=="Instance" then
-            log("VALUE",path.."."..tostring(k),simple(x))
+for _,name in ipairs(names) do
+    local fn=cls[name]
+    if type(fn)=="function" then inspect(fn,name,0) else log("missing",name) end
+end
+
+local game=client.instanced_minigame
+if type(game)=="table" then
+    log("LIVE","room="..tostring(game.current_room_index),
+        "selected="..tostring(game.selected_door_index),
+        "confirmed="..tostring(game.confirmed_selected_door_index))
+    if type(game.inventory)=="table" then
+        for k,v in pairs(game.inventory) do log("INV",k,v) end
+    end
+    local r=game.runners and game.runners[game.player_model and game.player_model.Name or ""]
+    if not r and game.runners then
+        for k,v in pairs(game.runners) do
+            if type(v)=="table" then log("RUNNER",k,"health="..tostring(v.health),"max="..tostring(v.max_health),"temp="..tostring(v.temp_health)) end
         end
     end
 end
-
-if type(getloadedmodules)~="function" then
-    log("getloadedmodules unavailable")
-    return
-end
-
-local ok,mods=pcall(getloadedmodules)
-if not ok or type(mods)~="table" then
-    log("getloadedmodules failed",mods)
-    return
-end
-
-local matches={}
-for _,m in ipairs(mods) do
-    if typeof(m)=="Instance" and m:IsA("ModuleScript") then
-        local full=m:GetFullName():lower()
-        if full:find("hauntlet",1,true) then matches[#matches+1]=m end
-    end
-end
-table.sort(matches,function(a,b) return a:GetFullName()<b:GetFullName() end)
-log("LOADED_HAUNTLET_MODULES",#matches)
-
-for _,m in ipairs(matches) do
-    log("MODULE",m:GetFullName())
-    local rok,result=pcall(require,m) -- already loaded: reads cached return value
-    if rok then
-        dumpSurface(result,m.Name,0,{})
-    else
-        log("CACHED_REQUIRE_FAILED",m:GetFullName(),result)
-    end
-end
-
 log("END")
