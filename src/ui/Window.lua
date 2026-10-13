@@ -6,7 +6,7 @@ return function(ASTRAL)
     local player = Players.LocalPlayer
 
     local UI = {
-        Version = "0.6.0-dev.6.11-halloween-suite",
+        Version = "0.6.1-dev.6.11.7-mobile-window-clamp",
         Pages = {},
         Nav = {},
         ModuleCards = {},
@@ -1880,6 +1880,49 @@ return function(ASTRAL)
 
     local minimized = false
 
+    -- Keep the draggable title bar recoverable on phones/tablets. Restoring a
+    -- full-size window around a minimized bar near the screen edge can otherwise
+    -- expand the title bar beyond the viewport with no way to grab it again.
+    local function clampWindowToViewport()
+        local camera = workspace.CurrentCamera
+        local viewport = camera and camera.ViewportSize
+        if not viewport then return end
+
+        local position = shell.AbsolutePosition
+        local size = shell.AbsoluteSize
+        local titleHeight = math.max(36, top.AbsoluteSize.Y)
+
+        local dx, dy = 0, 0
+        local topMargin = 6
+        local sideGrab = 72
+
+        if position.Y < topMargin then
+            dy = topMargin - position.Y
+        elseif position.Y > viewport.Y - math.min(titleHeight, 44) then
+            dy = (viewport.Y - math.min(titleHeight, 44)) - position.Y
+        end
+
+        if position.X + size.X < sideGrab then
+            dx = sideGrab - (position.X + size.X)
+        elseif position.X > viewport.X - sideGrab then
+            dx = (viewport.X - sideGrab) - position.X
+        end
+
+        if dx ~= 0 or dy ~= 0 then
+            shell.Position = UDim2.new(
+                shell.Position.X.Scale,
+                shell.Position.X.Offset + dx,
+                shell.Position.Y.Scale,
+                shell.Position.Y.Offset + dy
+            )
+        end
+    end
+
+    function UI:ResetWindowPosition()
+        shell.Position = UDim2.fromScale(0.5, 0.5)
+        task.defer(clampWindowToViewport)
+    end
+
     ASTRAL.Runtime:Connect(minimise.MouseButton1Click, function()
         minimized = not minimized
         content.Visible = not minimized
@@ -1889,6 +1932,10 @@ return function(ASTRAL)
         shell.Size = minimized
             and UDim2.fromOffset(420, 58)
             or UDim2.fromOffset(920, 590)
+
+        -- Size changes happen around the centred anchor point. Clamp after the
+        -- new absolute bounds settle so restoring cannot strand the title bar.
+        task.defer(clampWindowToViewport)
     end)
 
     ASTRAL.Runtime:Connect(close.MouseButton1Click, function()
@@ -1929,6 +1976,7 @@ return function(ASTRAL)
                 startPosition.Y.Scale,
                 startPosition.Y.Offset + delta.Y
             )
+            clampWindowToViewport()
         end
     end)
 
@@ -1952,6 +2000,8 @@ return function(ASTRAL)
             content.Position = UDim2.fromOffset(178, 58)
             content.Size = UDim2.new(1, -178, 1, -86)
         end
+
+        task.defer(clampWindowToViewport)
     end
 
     responsive()
