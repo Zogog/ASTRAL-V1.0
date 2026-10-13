@@ -1,4 +1,4 @@
--- ASTRAL Hauntlet 2 standalone runner v0.4.1
+-- ASTRAL Hauntlet 2 standalone runner v0.4.2
 -- Autonomous door + Nexus runner. Starts only after the normal Hauntlet client is participating.
 -- Uses the live HauntletMinigameClient state and its own message_server("try_pick_door", index)
 -- path discovered from the normal door callbacks. Adds one-shot verified item use.
@@ -21,7 +21,7 @@ local function log(...)
     for i = 1, select("#", ...) do
         out[i] = tostring(select(i, ...))
     end
-    print("[ASTRAL HAUNTLET RUN v0.4.1] " .. table.concat(out, " "))
+    print("[ASTRAL HAUNTLET RUN v0.4.2] " .. table.concat(out, " "))
 end
 
 local function getClient()
@@ -304,6 +304,8 @@ end
 local itemAutoDisabled = false
 local itemAttempted = {}
 local itemEffectConfirmed = {}
+local itemLastConfirmedAt = {}
+local itemRetryAfter = {}
 local function healthString(runner)
     if not runner then return "?/?,temp=?" end
     return tostring(runner.health) .. "/" .. tostring(runner.max_health)
@@ -312,6 +314,20 @@ end
 
 local function useItemOnce(run, kind, roomIndex)
     if itemAutoDisabled or not alive() or not run.is_participating then return false end
+
+    local nowClock = os.clock()
+    if itemRetryAfter[kind] and nowClock < itemRetryAfter[kind] then
+        log("ITEM BACKOFF", kind,
+            string.format("%.1fs remaining", itemRetryAfter[kind] - nowClock))
+        return false
+    end
+    if itemLastConfirmedAt[kind]
+        and nowClock - itemLastConfirmedAt[kind] < 2.5 then
+        log("ITEM COOLDOWN", kind,
+            string.format("%.1fs since confirmed use", nowClock - itemLastConfirmedAt[kind]))
+        return false
+    end
+
     local key = tostring(roomIndex) .. ":" .. kind
     if itemAttempted[key] then return false end
     local before = inventoryCount(run, kind)
@@ -357,6 +373,8 @@ local function useItemOnce(run, kind, roomIndex)
 
         if after < before or stateEffect then
             itemEffectConfirmed[kind] = true
+            itemLastConfirmedAt[kind] = os.clock()
+            itemRetryAfter[kind] = nil
             log("ITEM CONFIRMED", kind,
                 "count=" .. before .. "->" .. after,
                 "state_effect=" .. tostring(stateEffect),
@@ -366,9 +384,11 @@ local function useItemOnce(run, kind, roomIndex)
         task.wait(0.05)
     end
 
+    -- A rejected/cooldown-limited consumable must not disable healing or other
+    -- item types. Back off only this item briefly and keep the survival system live.
+    itemRetryAfter[kind] = os.clock() + 2.5
     log("ITEM UNCONFIRMED", kind,
-        "no inventory or health-state confirmation after 1.5s; disabling auto-items for this run")
-    itemAutoDisabled = true
+        "no inventory or health-state confirmation after 1.5s; per-item backoff only")
     return false
 end
 
@@ -502,7 +522,7 @@ end
 
 log("ARMED - autonomous Hauntlet with survival item + Nexus routing")
 log("POLICY gold heart early, red heart when damaged, ghost heart when vulnerable")
-log("ITEM SAFETY confirms inventory OR health-state effects; no repeated max-heart use")
+log("ITEM SAFETY per-item cooldown/backoff; one rejected potion cannot disable healing")
 log("MOVEMENT follows each selected doorway so the avatar reaches the Nexus with the route")
 log("NEXUS AUTO prefers Bounce House > Copycat > Spider Den > Security > Power Station > Nightmare")
 log("Start Hauntlet normally; this script takes over once room choices are live.")
@@ -522,6 +542,8 @@ while alive() and task.wait(0.05) do
             itemAutoDisabled = false
             itemAttempted = {}
             itemEffectConfirmed = {}
+            itemLastConfirmedAt = {}
+            itemRetryAfter = {}
             log("ATTACHED", tostring(run.minigame_id or "?"))
         end
 
@@ -550,10 +572,16 @@ while alive() and task.wait(0.05) do
             log(nexus and "NEXUS" or "ROOM", roomIndex, "hp=" .. healthString(runner))
             log("INVENTORY BEFORE", inventoryString(run))
 
-            useSurvivalItems(run, roomIndex)
-            if not alive() or not run.is_participating then
-                log("RUN ENDED during item stage")
-                break
+            -- Nexus is a timed route decision, not a combat room. Do not spend
+            -- 1.5 seconds probing consumables here; choose the floor immediately.
+            if nexus then
+                log("NEXUS ITEMS", "skipped - route selection takes priority")
+            else
+                useSurvivalItems(run, roomIndex)
+                if not alive() or not run.is_participating then
+                    log("RUN ENDED during item stage")
+                    break
+                end
             end
 
             local choice, summary
