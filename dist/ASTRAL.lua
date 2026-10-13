@@ -78,7 +78,8 @@ local MANIFEST = {
     { id = "pet_pens",        path = "src/modules/pets/PetPens.lua",  required = false },
     { id = "neon_factory",    path = "src/modules/pets/NeonFactory.lua", required = true },
     { id = "lures",           path = "src/modules/inventory/Lures.lua", required = false },
-    { id = "hauntlet_2",      path = "src/modules/events/Hauntlet2.lua", required = false },\n    { id = "halloween_2026",  path = "src/modules/events/Halloween2026.lua", required = false },
+    { id = "hauntlet_2",      path = "src/modules/events/Hauntlet2.lua", required = false },
+    { id = "halloween_2026",  path = "src/modules/events/Halloween2026.lua", required = false },
 
     -- One file per core pet ailment.
     { id = "mystery",     path = "src/modules/autofarm/ailments/Mystery.lua",     required = true },
