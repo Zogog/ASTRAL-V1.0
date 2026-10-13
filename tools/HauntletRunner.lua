@@ -178,6 +178,19 @@ local function chooseDoor(run)
         local legal, reason = isLegal(run, runner, choice)
         local profile = DOORS[choice.kind]
         local score = profile and profile.score or 9999
+        -- Official 2026 notes describe keyed paths as safer/richer. Spend keys
+        -- when stocked; keep the last grey key in reserve where possible.
+        if legal and choice.kind == "locked" then
+            score = inventoryCount(run, "key") >= 2 and 65 or 105
+        elseif legal and choice.kind == "security" then
+            score = inventoryCount(run, "key") >= 3 and 75 or 135
+        elseif legal and choice.kind == "gold_locked" then
+            score = 50
+        elseif legal and choice.kind == "bouncy" then
+            -- Bounce may redirect the door choice: don't treat low ghost
+            -- weight alone as proof that this is safer than wooden.
+            score = 110
+        end
         summary[#summary + 1] = string.format(
             "%d:%s[%s%s]",
             choice.index,
