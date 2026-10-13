@@ -1,8 +1,8 @@
--- ASTRAL Hauntlet 2 standalone runner v0.3.2
--- Autonomous door runner with inter-floor handoff. Starts only after the normal Hauntlet client is participating.
+-- ASTRAL Hauntlet 2 standalone runner v0.4.0
+-- Autonomous door + Nexus runner. Starts only after the normal Hauntlet client is participating.
 -- Uses the live HauntletMinigameClient state and its own message_server("try_pick_door", index)
 -- path discovered from the normal door callbacks. Adds one-shot verified item use.
--- No movement/teleport simulation. Special-floor choices remain manual.
+-- Follows selected doors physically and automatically chooses Nexus/special-floor routes.
 
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
@@ -21,7 +21,7 @@ local function log(...)
     for i = 1, select("#", ...) do
         out[i] = tostring(select(i, ...))
     end
-    print("[ASTRAL HAUNTLET RUN v0.3.2] " .. table.concat(out, " "))
+    print("[ASTRAL HAUNTLET RUN v0.4.0] " .. table.concat(out, " "))
 end
 
 local function getClient()
@@ -135,9 +135,11 @@ local function currentChoices(run)
     for ordinal, door in ipairs(raw) do
         local index = tonumber(door.Name) or ordinal
         local kind = tostring(door:GetAttribute("kind") or "unknown")
+        local areaKind = tostring(door:GetAttribute("area_kind") or "unknown")
         choices[#choices + 1] = {
             index = index,
             kind = kind,
+            area_kind = areaKind,
             door = door,
         }
     end
@@ -166,6 +168,38 @@ local function isLegal(run, runner, choice)
     end
 
     return true
+end
+
+-- Nexus rooms use the same try_pick_door protocol as ordinary rooms. Their
+-- two choices expose area_kind instead of a normal door kind.
+local NEXUS_AREA_SCORE = {
+    carnival = 10, copycat = 20, hallway = 25, spider = 30,
+    laboratory = 40, mechanical = 50, nightmare = 60,
+}
+
+local function isNexusChoices(roomIndex, choices)
+    if roomIndex < 1 or #choices ~= 2 then return false end
+    for _, choice in ipairs(choices) do
+        if choice.kind ~= "unknown" or choice.area_kind == "unknown" then
+            return false
+        end
+    end
+    return true
+end
+
+local function chooseNexus(choices)
+    local ranked, summary = {}, {}
+    for _, choice in ipairs(choices) do
+        local score = NEXUS_AREA_SCORE[choice.area_kind] or 999
+        choice.score = score
+        ranked[#ranked + 1] = choice
+        summary[#summary + 1] = string.format("%d:%s[score=%d]", choice.index, choice.area_kind, score)
+    end
+    table.sort(ranked, function(a, b)
+        if a.score ~= b.score then return a.score < b.score end
+        return a.index < b.index
+    end)
+    return ranked[1], table.concat(summary, " | ")
 end
 
 local function chooseDoor(run)
@@ -417,15 +451,15 @@ local function waitForOutcome(run, roomBefore, index)
     return false, "door was not server-confirmed within 8s"
 end
 
-log("ARMED - autonomous Hauntlet with survival item use")
+log("ARMED - autonomous Hauntlet with survival item + Nexus routing")
 log("POLICY gold heart early, red heart when damaged, ghost heart when vulnerable")
 log("ITEM SAFETY confirms inventory OR health-state effects; no repeated max-heart use")
 log("MOVEMENT follows each selected doorway so the avatar reaches the Nexus with the route")
+log("NEXUS AUTO prefers Bounce House > Copycat > Spider Den > Security > Power Station > Nightmare")
 log("Start Hauntlet normally; this script takes over once room choices are live.")
 
 local attached = false
 local lastHandledRoom = nil
-local waitingForInterfloor = false
 local stoppedForError = false
 
 while alive() and task.wait(0.05) do
@@ -436,7 +470,6 @@ while alive() and task.wait(0.05) do
         if not attached then
             attached = true
             lastHandledRoom = nil
-            waitingForInterfloor = false
             itemAutoDisabled = false
             itemAttempted = {}
             itemEffectConfirmed = {}
@@ -446,27 +479,6 @@ while alive() and task.wait(0.05) do
         local roomIndex = tonumber(run.current_room_index) or 0
         local choices = currentChoices(run)
 
-        -- Every tenth room is an inter-floor/Nexus choice rather than a normal
-        -- three-door room. We have not yet captured that interaction path, so do
-        -- not guess or spam a message. Hand that choice to the player, then resume
-        -- automatically as soon as the next normal room appears.
-        if roomIndex >= 10 and roomIndex % 10 == 0 and #choices == 0 then
-            if not waitingForInterfloor then
-                waitingForInterfloor = true
-                lastHandledRoom = roomIndex
-                local runner = getRunner(run)
-                log("INTER-FLOOR", "room=" .. roomIndex,
-                    "room_model=" .. tostring(run.current_room and run.current_room.Name),
-                    "hp=" .. tostring(runner and runner.health or "?"))
-                log("INVENTORY", inventoryString(run))
-                log("MANUAL ACTION NEEDED - choose the between-floor minigame; runner will resume automatically afterward")
-            end
-        elseif #choices > 0 and waitingForInterfloor then
-            waitingForInterfloor = false
-            lastHandledRoom = nil
-            log("INTER-FLOOR COMPLETE - normal doors returned; autonomous running resumed")
-        end
-
         if roomIndex >= 1
             and #choices > 0
             and run.selected_door_index == nil
@@ -475,27 +487,37 @@ while alive() and task.wait(0.05) do
 
             lastHandledRoom = roomIndex
             local runner = getRunner(run)
-            local hp = runner and tonumber(runner.health) or "?"
-            local temp = runner and tonumber(runner.temp_health) or "?"
-            log("ROOM", roomIndex, "hp=" .. healthString(runner))
+            local nexus = isNexusChoices(roomIndex, choices)
+            log(nexus and "NEXUS" or "ROOM", roomIndex, "hp=" .. healthString(runner))
             log("INVENTORY BEFORE", inventoryString(run))
+
             useSurvivalItems(run, roomIndex)
             if not alive() or not run.is_participating then
                 log("RUN ENDED during item stage")
                 break
             end
-            local choice, summary = chooseDoor(run)
-            log("AFTER ITEMS", "hp=" .. healthString(getRunner(run)))
-            log("INVENTORY", inventoryString(run))
-            log("CHOICES", summary)
+
+            local choice, summary
+            if nexus then
+                choice, summary = chooseNexus(choices)
+                log("NEXUS CHOICES", summary)
+            else
+                choice, summary = chooseDoor(run)
+                log("AFTER ITEMS", "hp=" .. healthString(getRunner(run)))
+                log("INVENTORY", inventoryString(run))
+                log("CHOICES", summary)
+            end
 
             if not choice then
-                log("STOP - no legal known door found; leaving control to you")
+                log("STOP - no legal known choice found; leaving control to you")
                 stoppedForError = true
                 break
             end
 
-            log("PICK", choice.index .. ":" .. choice.kind, "score=" .. tostring(choice.score))
+            local label = nexus and choice.area_kind or choice.kind
+            log(nexus and "NEXUS PICK" or "PICK",
+                choice.index .. ":" .. label, "score=" .. tostring(choice.score))
+
             local followed, followResult = followDoor(choice)
             if followed then
                 log("FOLLOW", "door=" .. choice.index, "position=" .. followResult)
@@ -503,6 +525,7 @@ while alive() and task.wait(0.05) do
                 log("FOLLOW SKIP", followResult)
             end
             task.wait(0.05)
+
             local sent, result = sendDoorChoice(run, choice.index)
             if not sent then
                 log("STOP - try_pick_door failed:", result)
@@ -510,16 +533,20 @@ while alive() and task.wait(0.05) do
                 break
             end
 
-            log("SENT", "try_pick_door", choice.index)
+            log("SENT", "try_pick_door", choice.index, nexus and "(NEXUS)" or "")
             local progressed, outcome = waitForOutcome(run, roomIndex, choice.index)
             if progressed then
-                log("RESULT", outcome)
+                log(nexus and "NEXUS RESULT" or "RESULT", outcome)
             else
                 log("STOP -", outcome, "| no retry sent")
                 stoppedForError = true
                 break
             end
+        elseif roomIndex >= 10 and #choices == 0 and lastHandledRoom ~= roomIndex then
+            lastHandledRoom = roomIndex
+            log("SPECIAL ROOM WAIT", "room=" .. roomIndex, "no selectable doors exposed yet")
         end
+end
     elseif attached then
         log("RUN ENDED / DETACHED")
         attached = false
