@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.6.12.1 — Lures safe bait discovery
+    ASTRAL 1.0.0-dev.6.12.2 — Integrated Hauntlet 2 v0.6
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6.12.1-lures-safe-bait",
-    Build = "Long-session automation + Lures safe bait discovery + campsite ailment fallbacks",
+    Version = "1.0.0-dev.6.12.2-hauntlet-v0.6",
+    Build = "Long-session automation + integrated Hauntlet 2 v0.6 + Lures",
 
     Repository = {
         Owner = "Zogog",
