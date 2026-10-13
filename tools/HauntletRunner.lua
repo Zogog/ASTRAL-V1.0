@@ -1,7 +1,8 @@
--- ASTRAL Hauntlet 2 standalone runner v0.2.1
+-- ASTRAL Hauntlet 2 standalone runner v0.3
 -- Autonomous door runner with inter-floor handoff. Starts only after the normal Hauntlet client is participating.
 -- Uses the live HauntletMinigameClient state and its own message_server("try_pick_door", index)
--- path discovered from the normal door callbacks. No movement/teleport simulation and no item use yet.
+-- path discovered from the normal door callbacks. Adds one-shot verified item use.
+-- No movement/teleport simulation. Special-floor choices remain manual.
 
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
@@ -20,7 +21,7 @@ local function log(...)
     for i = 1, select("#", ...) do
         out[i] = tostring(select(i, ...))
     end
-    print("[ASTRAL HAUNTLET RUN v0.2.1] " .. table.concat(out, " "))
+    print("[ASTRAL HAUNTLET RUN v0.3] " .. table.concat(out, " "))
 end
 
 local function getClient()
@@ -199,6 +200,104 @@ local function chooseDoor(run)
     return candidates[1], table.concat(summary, " | ")
 end
 
+-- Item-use route was recovered from the live Hauntlet hotbar callback:
+-- message_server("try_use_item", itemKind). Exact argument behavior is being
+-- validated here. Never retry an unconfirmed use, and disable further automatic
+-- item requests for this run if the first one does not change authoritative state.
+local itemAutoDisabled = false
+local itemAttempted = {}
+local function healthString(runner)
+    if not runner then return "?/?,temp=?" end
+    return tostring(runner.health) .. "/" .. tostring(runner.max_health)
+        .. ",temp=" .. tostring(runner.temp_health or 0)
+end
+
+local function useItemOnce(run, kind, roomIndex)
+    if itemAutoDisabled or not alive() or not run.is_participating then return false end
+    local key = tostring(roomIndex) .. ":" .. kind
+    if itemAttempted[key] then return false end
+    local before = inventoryCount(run, kind)
+    if before < 1 then return false end
+    itemAttempted[key] = true
+
+    if type(run.message_server) ~= "function" then
+        log("ITEM DISABLED - live run has no message_server")
+        itemAutoDisabled = true
+        return false
+    end
+
+    local runner = getRunner(run)
+    local hpBefore = healthString(runner)
+    log("ITEM TRY", kind, "room=" .. roomIndex,
+        "count=" .. before, "hp=" .. hpBefore)
+    local ok, result = pcall(function()
+        return run:message_server("try_use_item", kind)
+    end)
+    if not ok then
+        log("ITEM DISABLED - try_use_item error", kind, tostring(result))
+        itemAutoDisabled = true
+        return false
+    end
+
+    local started = os.clock()
+    while alive() and run.is_participating and os.clock() - started < 1.5 do
+        local after = inventoryCount(run, kind)
+        if after < before then
+            log("ITEM CONFIRMED", kind, "count=" .. before .. "->" .. after,
+                "hp=" .. healthString(getRunner(run)))
+            return true
+        end
+        task.wait(0.05)
+    end
+
+    log("ITEM UNCONFIRMED", kind,
+        "no inventory decrement after 1.5s; disabling auto-items for this run")
+    itemAutoDisabled = true
+    return false
+end
+
+local function useSurvivalItems(run, roomIndex)
+    if itemAutoDisabled then return end
+    local runner = getRunner(run)
+    if not runner then
+        log("ITEM SKIP - runner health unavailable")
+        return
+    end
+
+    -- A Golden Heart Potion increases max red hearts. The 2026 game notes say
+    -- it does not refill previously missing hearts. Use early to gain capacity.
+    if inventoryCount(run, "gold_potion") > 0 then
+        useItemOnce(run, "gold_potion", roomIndex)
+    end
+
+    runner = getRunner(run)
+    if itemAutoDisabled or not runner or not run.is_participating then return end
+    local hp = tonumber(runner.health)
+    local maxHp = tonumber(runner.max_health)
+    if not hp or not maxHp then return end
+
+    -- Red Heart Potion restores missing red hearts. Save until critical health
+    -- or until at least two red hearts are missing.
+    if inventoryCount(run, "red_potion") > 0
+        and hp < maxHp
+        and (hp <= 1 or maxHp - hp >= 2) then
+        useItemOnce(run, "red_potion", roomIndex)
+    end
+
+    runner = getRunner(run)
+    if itemAutoDisabled or not runner or not run.is_participating then return end
+    hp = tonumber(runner.health)
+    local temp = tonumber(runner.temp_health) or 0
+    if hp and hp <= 2 and temp < 1
+        and inventoryCount(run, "ghost_potion") > 0 then
+        -- Temporary heart protects against damage for the next door.
+        useItemOnce(run, "ghost_potion", roomIndex)
+    end
+
+    -- Cell Phone, Rainbow Wand and door-selection information are deliberately
+    -- left untouched until we verify their precise client interaction/results.
+end
+
 local function sendDoorChoice(run, index)
     if type(run.message_server) ~= "function" then
         return false, "live run has no message_server function"
@@ -244,8 +343,9 @@ local function waitForOutcome(run, roomBefore, index)
     return false, "door was not server-confirmed within 8s"
 end
 
-log("ARMED - first autonomous Hauntlet attempt")
-log("POLICY safe doors first; no automatic item use; no retries on an unconfirmed choice")
+log("ARMED - autonomous Hauntlet with survival item use")
+log("POLICY gold heart early, red heart when damaged, ghost heart when vulnerable")
+log("ITEM SAFETY one request per item/room; disable items on first unconfirmed response")
 log("Start Hauntlet normally; this script takes over once room choices are live.")
 
 local attached = false
@@ -262,6 +362,8 @@ while alive() and task.wait(0.05) do
             attached = true
             lastHandledRoom = nil
             waitingForInterfloor = false
+            itemAutoDisabled = false
+            itemAttempted = {}
             log("ATTACHED", tostring(run.minigame_id or "?"))
         end
 
@@ -299,9 +401,15 @@ while alive() and task.wait(0.05) do
             local runner = getRunner(run)
             local hp = runner and tonumber(runner.health) or "?"
             local temp = runner and tonumber(runner.temp_health) or "?"
+            log("ROOM", roomIndex, "hp=" .. healthString(runner))
+            log("INVENTORY BEFORE", inventoryString(run))
+            useSurvivalItems(run, roomIndex)
+            if not alive() or not run.is_participating then
+                log("RUN ENDED during item stage")
+                break
+            end
             local choice, summary = chooseDoor(run)
-
-            log("ROOM", roomIndex, "hp=" .. tostring(hp), "temp=" .. tostring(temp))
+            log("AFTER ITEMS", "hp=" .. healthString(getRunner(run)))
             log("INVENTORY", inventoryString(run))
             log("CHOICES", summary)
 
