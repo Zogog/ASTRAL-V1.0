@@ -9,15 +9,12 @@ return function(ASTRAL)
     local Fsys = require(ReplicatedStorage:WaitForChild("Fsys"))
     local ClientData = Fsys.load("ClientData")
     local InventoryDB = Fsys.load("InventoryDB")
-    local LuresConfig
-    pcall(function() LuresConfig = Fsys.load("LuresConfig") end)
-
     local Lures = {
         Id = "lures",
         Name = "Lures",
         Page = "Inventory",
         Description = "Automatically collect completed lures and recharge them for long sessions.",
-        Version = "0.1.0-dev.6.12-lure-lifecycle",
+        Version = "0.1.1-dev.6.12.1-safe-bait-discovery",
         Implemented = true,
         Enabled = false,
         Busy = false,
@@ -108,8 +105,6 @@ return function(ASTRAL)
                 or (InventoryDB.toys and InventoryDB.toys[kind])
             if entry and tonumber(entry.lure_time) then
                 duration = tonumber(entry.lure_time)
-            elseif LuresConfig and LuresConfig.Baits and LuresConfig.Baits[kind] then
-                duration = tonumber(LuresConfig.Baits[kind].Duration) or duration
             end
         end)
         return duration
@@ -117,11 +112,12 @@ return function(ASTRAL)
 
     local function isCompatibleBait(kind)
         if not kind then return false end
-        if LuresConfig and type(LuresConfig.Baits) == "table" then
-            return LuresConfig.Baits[kind] ~= nil
-        end
-        -- If LuresConfig cannot be loaded, do not guess which food can be bait.
-        return false
+        -- Match Dusk & Shine's live bait picker: owned food whose kind
+        -- explicitly identifies itself as bait/lure. This avoids loading the
+        -- optional LuresConfig module, which is not present on every client.
+        local lower = tostring(kind):lower()
+        return string.find(lower, "bait", 1, true) ~= nil
+            or string.find(lower, "lure", 1, true) ~= nil
     end
 
     function Lures:RefreshBaits()
