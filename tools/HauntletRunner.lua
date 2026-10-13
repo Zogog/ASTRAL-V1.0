@@ -1,4 +1,4 @@
--- ASTRAL Hauntlet 2 standalone runner v0.2
+-- ASTRAL Hauntlet 2 standalone runner v0.2.1
 -- Autonomous door runner with inter-floor handoff. Starts only after the normal Hauntlet client is participating.
 -- Uses the live HauntletMinigameClient state and its own message_server("try_pick_door", index)
 -- path discovered from the normal door callbacks. No movement/teleport simulation and no item use yet.
@@ -20,7 +20,7 @@ local function log(...)
     for i = 1, select("#", ...) do
         out[i] = tostring(select(i, ...))
     end
-    print("[ASTRAL HAUNTLET RUN v0.2] " .. table.concat(out, " "))
+    print("[ASTRAL HAUNTLET RUN v0.2.1] " .. table.concat(out, " "))
 end
 
 local function getClient()
@@ -344,3 +344,11 @@ elseif stoppedForError then
 else
     log("DONE")
 end
+
+-- Explicit teardown. There are no event connections or spawned worker loops in
+-- this standalone runner; clearing the singleton token removes its final global
+-- reference as well. After this point this copy has no code left executing.
+if env.ASTRAL_HAUNTLET_RUNNER_TOKEN == TOKEN then
+    env.ASTRAL_HAUNTLET_RUNNER_TOKEN = nil
+end
+log("STOPPED - runner fully unloaded")
