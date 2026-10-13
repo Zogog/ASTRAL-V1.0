@@ -202,6 +202,16 @@ for _, entry in ipairs(MANIFEST) do
         end
     end
 end
+
+-- All feature modules now exist, so persisted module/sub-feature state can be
+-- restored without racing registration order or creating stale stub state.
+if ASTRAL.Config and ASTRAL.Config.Restore then
+    local restored, restoreReason = ASTRAL.Config:Restore()
+    if not restored then
+        warn("[ASTRAL CONFIG] Restore:", tostring(restoreReason))
+    end
+end
+
 if ASTRAL.State then
     ASTRAL.State.Runtime = "READY"
     ASTRAL.State:Log("ASTRAL " .. ASTRAL.Version .. " loaded")
@@ -218,6 +228,9 @@ if ASTRAL.State then
             return n
         end)()
     ))
+end
+if ASTRAL.Config and ASTRAL.Config.StartAutosave then
+    ASTRAL.Config:StartAutosave()
 end
 if ASTRAL.UI and ASTRAL.UI.Refresh then
     ASTRAL.UI:Refresh()
