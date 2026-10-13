@@ -1,5 +1,5 @@
 --[[
-    ASTRAL 1.0.0-dev.6.11.7 — Mobile Window Clamp
+    ASTRAL 1.0.0-dev.6.11.8 — Sleepy Cross-House Fallback
 
     Only this loader is injected directly. Core/UI/feature modules
     are fetched independently from the repository.
@@ -8,8 +8,8 @@
 
 local ASTRAL = {
     Name = "ASTRAL",
-    Version = "1.0.0-dev.6.11.7-mobile-window-clamp",
-    Build = "Halloween 2026 suite + mobile-safe window recovery",
+    Version = "1.0.0-dev.6.11.8-sleep-fallback",
+    Build = "Halloween 2026 suite + mobile window clamp + Sleepy fallback",
 
     Repository = {
         Owner = "Zogog",
