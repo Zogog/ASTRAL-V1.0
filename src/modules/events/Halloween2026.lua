@@ -25,7 +25,7 @@ return function(ASTRAL)
         Name = "Halloween 2026",
         Page = "Events",
         Description = "Ghost Gallery, Crypt, Twigs, Candy Corn, quests, event shop and session statistics.",
-        Version = "0.1.6-dev.6.11.6-crypt-claim-latch",
+        Version = "0.1.7-dev.6.12.2-hauntlet-coexistence",
         Implemented = true,
         Enabled = false,
         Busy = false,
@@ -1088,6 +1088,17 @@ return function(ASTRAL)
 
             if Halloween.Enabled then
                 local ok, err = pcall(function()
+                    -- Hauntlet is a timed instanced run and owns scheduler priority 100.
+                    -- Do not let Gallery/Crypt/Twig/shop actions teleport or mutate event
+                    -- state while the integrated Hauntlet runner is participating.
+                    local hauntlet = ASTRAL.Modules:Get("hauntlet_2")
+                    if hauntlet and hauntlet.Attached then
+                        Halloween.Busy = false
+                        Halloween.CurrentAction = "Hauntlet 2 active - event actions paused"
+                        ASTRAL.Scheduler:Release("halloween_2026")
+                        return
+                    end
+
                     if Halloween.PendingPurchase then
                         runPurchase()
                         return
