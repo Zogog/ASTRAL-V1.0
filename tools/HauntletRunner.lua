@@ -1,5 +1,5 @@
--- ASTRAL Hauntlet 2 standalone runner v0.4.2
--- Autonomous door + Nexus runner. Starts only after the normal Hauntlet client is participating.
+-- ASTRAL Hauntlet 2 overnight runner v0.5.0
+-- Persistent autonomous door + Nexus runner. Waits across runs until explicitly stopped.
 -- Uses the live HauntletMinigameClient state and its own message_server("try_pick_door", index)
 -- path discovered from the normal door callbacks. Adds one-shot verified item use.
 -- Follows selected doors physically and automatically chooses Nexus/special-floor routes.
@@ -16,13 +16,49 @@ local function alive()
     return env.ASTRAL_HAUNTLET_RUNNER_TOKEN == TOKEN
 end
 
+local function stopRunner()
+    if env.ASTRAL_HAUNTLET_RUNNER_TOKEN == TOKEN then
+        env.ASTRAL_HAUNTLET_RUNNER_TOKEN = nil
+    end
+end
+env.ASTRAL_HAUNTLET_RUNNER_STOP = stopRunner
+
 local function log(...)
     local out = {}
     for i = 1, select("#", ...) do
         out[i] = tostring(select(i, ...))
     end
-    print("[ASTRAL HAUNTLET RUN v0.4.2] " .. table.concat(out, " "))
+    print("[ASTRAL HAUNTLET RUN v0.5.0] " .. table.concat(out, " "))
 end
+
+-- Anti-AFK is deliberately isolated from Hauntlet gameplay. It only responds
+-- to Roblox's local Idled signal and is disconnected when this runner stops.
+local antiAfkConnection = nil
+local function startAntiAfk()
+    local ok, virtualUser = pcall(function()
+        return game:GetService("VirtualUser")
+    end)
+    if not ok or not virtualUser then
+        log("ANTI-AFK unavailable - VirtualUser service not accessible")
+        return
+    end
+
+    antiAfkConnection = player.Idled:Connect(function()
+        if not alive() then return end
+        local worked, err = pcall(function()
+            virtualUser:CaptureController()
+            virtualUser:ClickButton2(Vector2.new(0, 0))
+        end)
+        if worked then
+            log("ANTI-AFK keepalive")
+        else
+            log("ANTI-AFK error", tostring(err))
+        end
+    end)
+    log("ANTI-AFK armed")
+end
+
+startAntiAfk()
 
 local function getClient()
     if type(getloadedmodules) ~= "function" then
@@ -520,12 +556,14 @@ local function waitForOutcome(run, roomBefore, index)
     return false, "door was not server-confirmed within 8s"
 end
 
-log("ARMED - autonomous Hauntlet with survival item + Nexus routing")
+log("ARMED - persistent overnight Hauntlet runner with survival items + Nexus routing")
 log("POLICY gold heart early, red heart when damaged, ghost heart when vulnerable")
 log("ITEM SAFETY per-item cooldown/backoff; one rejected potion cannot disable healing")
 log("MOVEMENT follows each selected doorway so the avatar reaches the Nexus with the route")
 log("NEXUS AUTO prefers Bounce House > Copycat > Spider Den > Security > Power Station > Nightmare")
-log("Start Hauntlet normally; this script takes over once room choices are live.")
+log("PERSISTENCE waits for future Hauntlet runs after each run ends")
+log("STOP with: getgenv().ASTRAL_HAUNTLET_RUNNER_STOP()")
+log("NOTE this version does not yet start a new Hauntlet by itself; it takes over whenever a run becomes participating.")
 
 local attached = false
 local lastHandledRoom = nil
@@ -580,7 +618,7 @@ while alive() and task.wait(0.05) do
                 useSurvivalItems(run, roomIndex)
                 if not alive() or not run.is_participating then
                     log("RUN ENDED during item stage")
-                    break
+                    continue
                 end
             end
 
@@ -596,9 +634,13 @@ while alive() and task.wait(0.05) do
             end
 
             if not choice then
-                log("STOP - no legal known choice found; leaving control to you")
+                log("CURRENT RUN HALTED - no legal known choice found; waiting for this run to end")
                 stoppedForError = true
-                break
+            end
+
+            if not choice then
+                -- lastHandledRoom prevents this room being retried/spammed.
+                continue
             end
 
             local label = nexus and choice.area_kind or choice.kind
@@ -623,9 +665,12 @@ while alive() and task.wait(0.05) do
 
             local sent, result = sendDoorChoice(run, choice.index)
             if not sent then
-                log("STOP - try_pick_door failed:", result)
+                log("CURRENT RUN HALTED - try_pick_door failed:", result)
                 stoppedForError = true
-                break
+            end
+
+            if not sent then
+                continue
             end
 
             log("SENT", "try_pick_door", choice.index, nexus and "(NEXUS)" or "")
@@ -636,9 +681,8 @@ while alive() and task.wait(0.05) do
                     nexusSnapshot = nil
                 end
             else
-                log("STOP -", outcome, "| no retry sent")
+                log("CURRENT RUN HALTED -", outcome, "| no retry sent; waiting for run end")
                 stoppedForError = true
-                break
             end
         elseif roomIndex >= 10 and #choices == 0 and lastHandledRoom ~= roomIndex then
             lastHandledRoom = roomIndex
@@ -648,19 +692,15 @@ while alive() and task.wait(0.05) do
         log("RUN ENDED / DETACHED")
         attached = false
         lastHandledRoom = nil
-        break
+        stoppedForError = false
+        nexusSnapshot = nil
+        log("WAITING - armed for the next Hauntlet run")
     end
 end
 
-if not alive() then
-    log("REPLACED by a newer runner instance")
-elseif stoppedForError then
-    log("HALTED safely - manual control remains available")
-else
-    log("DONE")
-end
+log("STOP REQUESTED or runner replaced")
 
--- Explicit teardown, including the passive Nexus payload listener.
+-- Explicit teardown, including Nexus capture and anti-AFK.
 if messageClientConnection then
     pcall(function()
         messageClientConnection:Disconnect()
@@ -669,7 +709,18 @@ if messageClientConnection then
 end
 nexusSnapshot = nil
 
+if antiAfkConnection then
+    pcall(function()
+        antiAfkConnection:Disconnect()
+    end)
+    antiAfkConnection = nil
+end
+
+if env.ASTRAL_HAUNTLET_RUNNER_STOP == stopRunner then
+    env.ASTRAL_HAUNTLET_RUNNER_STOP = nil
+end
+
 if env.ASTRAL_HAUNTLET_RUNNER_TOKEN == TOKEN then
     env.ASTRAL_HAUNTLET_RUNNER_TOKEN = nil
 end
-log("STOPPED - runner fully unloaded")
+log("STOPPED - runner and anti-AFK fully unloaded")
