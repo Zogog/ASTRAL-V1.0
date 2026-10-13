@@ -6,7 +6,7 @@ return function(ASTRAL)
     local player = Players.LocalPlayer
 
     local UI = {
-        Version = "0.6.1-dev.6.11.7-mobile-window-clamp",
+        Version = "0.6.2-dev.6.12.3-persistence",
         Pages = {},
         Nav = {},
         ModuleCards = {},
@@ -1790,6 +1790,49 @@ return function(ASTRAL)
         "Foundation UI and runtime preferences."
     )
 
+    local persistenceCard = UI:Card(
+        "Settings",
+        "Session persistence",
+        "Loading persistence status...",
+        "LONG SESSION"
+    )
+    persistenceCard.Body.Size = UDim2.new(1, -150, 0, 34)
+
+    local persistenceButton = new("TextButton", {
+        Text = "ON",
+        AnchorPoint = Vector2.new(1, 1),
+        Position = UDim2.new(1, -12, 1, -12),
+        Size = UDim2.fromOffset(92, 28),
+        BackgroundColor3 = C.panel2,
+        BorderSizePixel = 0,
+        AutoButtonColor = false,
+        Font = Enum.Font.GothamBold,
+        TextSize = 11,
+        TextColor3 = C.green,
+        Parent = persistenceCard.Frame,
+    })
+    corner(persistenceButton, 7)
+
+    ASTRAL.Runtime:Connect(persistenceButton.MouseButton1Click, function()
+        if not ASTRAL.Config.PersistenceAvailable then
+            ASTRAL.Config.LastPersistenceMessage = "Unavailable in this executor"
+            return
+        end
+        ASTRAL.Config:SetPersistenceEnabled(not ASTRAL.Config.PersistenceEnabled)
+    end)
+
+    UI.RefreshPersistence = function()
+        local config = ASTRAL.Config
+        local available = config and config.PersistenceAvailable
+        local enabled = available and config.PersistenceEnabled
+        persistenceButton.Text = not available and "N/A" or (enabled and "ON" or "OFF")
+        persistenceButton.TextColor3 = enabled and C.green or C.sub
+        persistenceCard.Body.Text = available
+            and ("Restores enabled modules and saved choices after relaunch. "
+                .. tostring(config.LastPersistenceMessage))
+            or "This executor does not expose readfile/writefile, so local persistence is unavailable."
+    end
+
     UI:Card(
         "Settings",
         "Responsive interface",
@@ -1875,6 +1918,11 @@ return function(ASTRAL)
         if self.RefreshHalloween then
             local ok, err = pcall(function() self:RefreshHalloween() end)
             if not ok then warn("[ASTRAL UI] Halloween refresh:", err) end
+        end
+
+        if self.RefreshPersistence then
+            local ok, err = pcall(function() self.RefreshPersistence() end)
+            if not ok then warn("[ASTRAL UI] Persistence refresh:", err) end
         end
     end
 
