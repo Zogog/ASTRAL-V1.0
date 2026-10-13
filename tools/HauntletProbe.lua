@@ -1,210 +1,254 @@
--- ASTRAL Hauntlet 2 probe v0.3 - READ ONLY.
--- Run once in Haunted Hotel lobby and once during an active Hauntlet 2 room.
--- Does not invoke remotes, move the character, or mutate game state.
+-- ASTRAL Hauntlet 2 probe v0.4 - READ ONLY.
+-- Cooldown/lobby mode maps client-side Hauntlet resources and loaded modules.
+-- Active-run mode prints only the current HUD room, newest generated room and its doors.
+-- Does not invoke remotes, move the character, require unknown modules, or mutate game state.
+
 local RS = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
+local CollectionService = game:GetService("CollectionService")
 local player = Players.LocalPlayer
-local function log(...) local a={} for i=1,select("#",...) do a[i]=tostring(select(i,...)) end print("[ASTRAL HAUNTLET PROBE] "..table.concat(a," ")) end
-local function match(s)
-    s=string.lower(tostring(s))
-    return s:find("haunt",1,true) or s:find("halloween",1,true) or s:find("hotel",1,true)
-        or s:find("minigame",1,true) or s:find("bolt",1,true)
+
+local function log(...)
+    local a={}
+    for i=1,select("#",...) do a[i]=tostring(select(i,...)) end
+    print("[ASTRAL HAUNTLET PROBE v0.4] "..table.concat(a," "))
 end
+
 local function preview(v)
     if typeof(v)~="table" then return tostring(v) end
     local a,n={},0
     for k,x in pairs(v) do
         n+=1
-        if n<=18 then
+        if n<=24 then
             local t=typeof(x)
             a[#a+1]=tostring(k)..((t=="number" or t=="boolean" or t=="string")
-                and ("="..tostring(x):sub(1,35)) or (":"..t))
+                and ("="..tostring(x):sub(1,60)) or (":"..t))
         end
     end
-    return "table("..n..") {"..table.concat(a,", ")..(n>18 and ", ..." or "").."}"
+    return "table("..n..") {"..table.concat(a,", ")..(n>24 and ", ..." or "").."}"
 end
-local function inspect(label,t)
-    if typeof(t)~="table" then log(label,preview(t)); return end
-    local n=0
-    for k,v in pairs(t) do
-        if match(k) then n+=1; if n<=35 then log(label.."."..tostring(k),preview(v)) end end
-    end
-    log(label,"matching fields:",n)
-end
-local function scan(label,root,max,filter)
-    if not root then log(label,"unavailable"); return end
-    local n,seen=0,0
-    for _,obj in ipairs(root:GetDescendants()) do
-        seen+=1
-        if seen>35000 then break end
-        if filter(obj.Name) then
-            n+=1
-            if n<=max then log(label,obj:GetFullName(),"["..obj.ClassName.."]") end
-        end
-    end
-    log(label,"matches:",n,"scanned:",seen)
-end
-log("START",os.date("!%Y-%m-%dT%H:%M:%SZ"))
-local okF,F=pcall(function() return require(RS:WaitForChild("Fsys",3)) end)
-local function load(name)
-    if not okF then return nil end
-    local ok,result=pcall(function() return F.load(name) end)
-    if not ok then log("Fsys.load",name,"error:",result); return nil end
-    return result
-end
-local Interiors=load("InteriorsM")
-if Interiors and Interiors.get_current_location then
-    local ok,v=pcall(Interiors.get_current_location)
-    log("Interiors location",ok and preview(v) or tostring(v))
-end
-local ClientData=load("ClientData")
-if ClientData then
-    local ok,w=pcall(function() return ClientData.get("char_wrapper","Raw") end)
-    if ok and typeof(w)=="table" then log("char_wrapper.location",preview(w.location)) end
-    local ok2,data=pcall(function() return ClientData.get_data() end)
-    if ok2 and typeof(data)=="table" then
-        local personal=data[player.Name]
-        inspect("ClientData.player",personal)
-        if typeof(personal)~="table" then inspect("ClientData.root",data) end
-    else log("ClientData.get_data error",data) end
-end
-local net=RS:FindFirstChild("adoptme_new_net")
-if net then
-    local n=0
-    for _,obj in ipairs(net:GetChildren()) do
-        if match(obj.Name) then
-            n+=1
-            if n<=90 then log("NET",obj.Name,"["..obj.ClassName.."]") end
-        end
-    end
-    log("NET matching endpoints",n)
-else log("NET unavailable") end
-scan("RS",RS,65,match)
-scan("WORLD",workspace,45,function(name)
-    local s=name:lower()
-    return s:find("haunt",1,true) or s:find("hotel",1,true) or s:find("bolt",1,true)
-end)
-local function showChildren(label,root,limit)
-    if not root then log(label,"unavailable"); return end
-    local n=0
-    log(label,"root",root:GetFullName(),"attributes:",preview(root:GetAttributes()))
-    for _,obj in ipairs(root:GetDescendants()) do
-        n+=1
-        if n>limit then break end
-        local value=""
-        if obj:IsA("ValueBase") then value=" value="..tostring(obj.Value) end
-        log(label,obj:GetFullName(),"["..obj.ClassName.."]"..value,"attributes:",preview(obj:GetAttributes()))
-    end
-    log(label,"items shown",math.min(n,limit))
-end
-local staticMap=workspace:FindFirstChild("StaticMap")
-if staticMap then
-    for _,obj in ipairs(staticMap:GetChildren()) do
-        if obj.Name:lower():find("hauntlet",1,true) and obj.Name:lower():find("minigame_state",1,true) then
-            showChildren("STATE",obj,120)
-        end
-    end
-end
-local interiors=workspace:FindFirstChild("Interiors")
-if interiors then
-    for _,interior in ipairs(interiors:GetChildren()) do
-        if interior.Name:find("HauntletInterior",1,true) then
-            local rooms=interior:FindFirstChild("Rooms")
-            showChildren("ACTIVE ROOMS",rooms,180)
-        end
-    end
-end
-local CollectionService=game:GetService("CollectionService")
+
 local function attrsAndTags(obj)
     local tags={}
     pcall(function() tags=CollectionService:GetTags(obj) end)
     return "attrs="..preview(obj:GetAttributes()).." tags="..table.concat(tags,",")
 end
+
 local function posOf(obj)
     if obj:IsA("BasePart") then return obj.Position end
-    if obj:IsA("Model") then local ok,p=pcall(function() return obj:GetPivot().Position end); if ok then return p end end
-end
-local function dumpHauntletStructure()
-    local interiors=workspace:FindFirstChild("Interiors")
-    if not interiors then return end
-    local active
-    for _,x in ipairs(interiors:GetChildren()) do
-        if x.Name:find("HauntletInterior::",1,true)==1 then active=x end
+    if obj:IsA("Model") then
+        local ok,p=pcall(function() return obj:GetPivot().Position end)
+        if ok then return p end
     end
-    if not active then log("STRUCT no active HauntletInterior"); return end
-    local rooms=active:FindFirstChild("Rooms")
-    if not rooms then log("STRUCT no Rooms"); return end
+end
+
+local function interestingName(name)
+    local s=name:lower()
+    local words={"door","interact","trigger","zone","spawn","bolt","ghost","reward","heart",
+        "key","phone","wand","exit","room","choice","safe","danger","shadow","rotten","lock",
+        "journal","lever","button","prompt","teleport","target"}
+    for _,w in ipairs(words) do if s:find(w,1,true) then return true end end
+    return false
+end
+
+local function loadFsys(name)
+    local fs=RS:FindFirstChild("Fsys")
+    if not fs then return nil end
+    local ok,F=pcall(require,fs)
+    if not ok then return nil end
+    local ok2,v=pcall(function() return F.load(name) end)
+    return ok2 and v or nil
+end
+
+local function hudValue(side)
+    local pg=player:FindFirstChild("PlayerGui")
+    local gui=pg and pg:FindFirstChild("HauntletInGameApp")
+    local body=gui and gui:FindFirstChild("Body")
+    local panel=body and body:FindFirstChild(side)
+    local container=panel and panel:FindFirstChild("Container")
+    local value=container and container:FindFirstChild("ValueLabel")
+    return value and value.Text or nil
+end
+
+local function currentLocation()
+    local Interiors=loadFsys("InteriorsM")
+    if Interiors and Interiors.get_current_location then
+        local ok,v=pcall(Interiors.get_current_location)
+        if ok and type(v)=="table" then return v.destination_id or v.full_destination_id end
+    end
+    return nil
+end
+
+local function findActiveInterior()
+    local interiors=workspace:FindFirstChild("Interiors")
+    if not interiors then return nil end
+    for _,x in ipairs(interiors:GetChildren()) do
+        if x.Name:find("HauntletInterior::",1,true)==1 then return x end
+    end
+end
+
+local function sortedRooms(active)
+    local rooms=active and active:FindFirstChild("Rooms")
+    if not rooms then return {} end
     local list=rooms:GetChildren()
-    log("STRUCT room instances",#list)
-    for i,room in ipairs(list) do
-        local p=posOf(room)
-        log("ROOM",i,room.Name,attrsAndTags(room),p and ("pos="..tostring(p)) or "")
-        local doors=room:FindFirstChild("Doors")
-        if doors then
-            for _,door in ipairs(doors:GetChildren()) do
-                local dp=door:FindFirstChild("DoorPart",true)
-                local pp=dp and dp.Position or posOf(door)
-                log("ROOMDOOR",i,room.Name,"door="..door.Name,attrsAndTags(door),
-                    dp and attrsAndTags(dp) or "",pp and ("pos="..tostring(pp)) or "")
-                local interesting=0
-                for _,d in ipairs(door:GetDescendants()) do
-                    local n=d.Name:lower()
-                    if n:find("reward",1,true) or n:find("ghost",1,true) or n:find("heart",1,true)
-                        or n:find("key",1,true) or n:find("phone",1,true) or n:find("wand",1,true)
-                        or d:IsA("ValueBase") or d:IsA("ProximityPrompt") or d:IsA("ClickDetector") then
-                        interesting+=1
-                        if interesting<=20 then
-                            local val=d:IsA("ValueBase") and (" value="..tostring(d.Value)) or ""
-                            log("DOORDETAIL",i,door.Name,d:GetFullName(),"["..d.ClassName.."]"..val,attrsAndTags(d))
-                        end
-                    end
+    table.sort(list,function(a,b)
+        local pa,pb=posOf(a),posOf(b)
+        if pa and pb then return pa.X>pb.X end
+        return a.Name<b.Name
+    end)
+    return list
+end
+
+local function dumpCurrentRun()
+    local active=findActiveInterior()
+    if not active then
+        log("RUN no active HauntletInterior")
+        return false
+    end
+
+    local list=sortedRooms(active)
+    local hudRoom=hudValue("Right")
+    local hudTime=hudValue("Left")
+    log("RUN location="..tostring(currentLocation()),"hud_room="..tostring(hudRoom),
+        "time_left="..tostring(hudTime),"generated_rooms="..tostring(#list))
+
+    if #list==0 then return true end
+    local room=list[#list]
+    local rp=posOf(room)
+    log("CURRENT",room.Name,attrsAndTags(room),rp and ("pos="..tostring(rp)) or "")
+
+    local doors=room:FindFirstChild("Doors")
+    if not doors then
+        log("CURRENT no Doors folder")
+        return true
+    end
+    local dl=doors:GetChildren()
+    table.sort(dl,function(a,b) return tonumber(a.Name) and tonumber(b.Name) and tonumber(a.Name)<tonumber(b.Name) or a.Name<b.Name end)
+    for _,door in ipairs(dl) do
+        local dp=door:FindFirstChild("DoorPart",true)
+        local pp=dp and dp.Position or posOf(door)
+        log("CHOICE","door="..door.Name,"kind="..tostring(door:GetAttribute("kind")),
+            attrsAndTags(door),dp and attrsAndTags(dp) or "",
+            pp and ("pos="..tostring(pp)) or "")
+        local shown=0
+        for _,d in ipairs(door:GetDescendants()) do
+            if interestingName(d.Name) or d:IsA("ValueBase") or d:IsA("ProximityPrompt") or d:IsA("ClickDetector") then
+                shown+=1
+                if shown<=30 then
+                    local val=d:IsA("ValueBase") and (" value="..tostring(d.Value)) or ""
+                    log("CHOICEDETAIL","door="..door.Name,d:GetFullName(),"["..d.ClassName.."]"..val,attrsAndTags(d))
                 end
             end
         end
     end
+    return true
+end
+
+local function dumpState()
+    local sm=workspace:FindFirstChild("StaticMap")
+    if not sm then return end
+    for _,root in ipairs(sm:GetChildren()) do
+        local n=root.Name:lower()
+        if n:find("hauntlet",1,true) and n:find("minigame_state",1,true) then
+            local values={}
+            for _,d in ipairs(root:GetDescendants()) do
+                if d:IsA("ValueBase") then values[#values+1]=d.Name.."="..tostring(d.Value) end
+            end
+            table.sort(values)
+            log("STATE",root.Name,table.concat(values," | "))
+        end
+    end
+end
+
+local function dumpTemplates()
     local resources=RS:FindFirstChild("Resources")
-    local hr=resources and resources:FindFirstChild("Hauntlet")
-    local templates=hr and hr:FindFirstChild("Rooms")
-    if templates then
-        log("TEMPLATES",#templates:GetChildren())
-        for _,t in ipairs(templates:GetChildren()) do log("TEMPLATE",t.Name,attrsAndTags(t)) end
+    local hauntlet=resources and resources:FindFirstChild("Hauntlet")
+    local rooms=hauntlet and hauntlet:FindFirstChild("Rooms")
+    if not rooms then log("TEMPLATES unavailable"); return end
+
+    local templates=rooms:GetChildren()
+    table.sort(templates,function(a,b) return a.Name<b.Name end)
+    log("TEMPLATES count="..#templates)
+
+    for _,room in ipairs(templates) do
+        local p=posOf(room)
+        log("TEMPLATE",room.Name,attrsAndTags(room),p and ("pivot="..tostring(p)) or "")
+        local doors=room:FindFirstChild("Doors")
+        if doors then
+            local dl=doors:GetChildren()
+            table.sort(dl,function(a,b) return a.Name<b.Name end)
+            for _,door in ipairs(dl) do
+                log("TEMPLATE_DOOR",room.Name,"door="..door.Name,
+                    "kind="..tostring(door:GetAttribute("kind")),attrsAndTags(door))
+            end
+        end
+        local shown=0
+        for _,d in ipairs(room:GetDescendants()) do
+            if interestingName(d.Name) or d:IsA("ValueBase") or d:IsA("ProximityPrompt") or d:IsA("ClickDetector") then
+                shown+=1
+                if shown<=80 then
+                    local val=d:IsA("ValueBase") and (" value="..tostring(d.Value)) or ""
+                    log("TEMPLATE_DETAIL",room.Name,d:GetFullName(),"["..d.ClassName.."]"..val,attrsAndTags(d))
+                end
+            end
+        end
+        log("TEMPLATE_DETAIL_COUNT",room.Name,shown)
     end
 end
-local function dumpHauntletGui()
-    local pg=player:FindFirstChild("PlayerGui")
-    local gui=pg and pg:FindFirstChild("HauntletInGameApp")
-    if not gui then log("HGUI unavailable"); return end
-    log("HGUI root Enabled="..tostring(gui.Enabled),attrsAndTags(gui))
-    local n=0
-    for _,o in ipairs(gui:GetDescendants()) do
-        local isText=o:IsA("TextLabel") or o:IsA("TextButton") or o:IsA("TextBox")
-        local isValue=o:IsA("ValueBase")
-        if isText or isValue then
-            local v=isText and tostring(o.Text) or tostring(o.Value)
-            if v~="" then n+=1; if n<=120 then log("HGUI",o:GetFullName(),"["..o.ClassName.."]",v,attrsAndTags(o)) end end
+
+local function dumpHauntletModules()
+    local found={}
+    for _,d in ipairs(RS:GetDescendants()) do
+        if d:IsA("ModuleScript") then
+            local full=d:GetFullName():lower()
+            if full:find("hauntlet",1,true) or
+               (full:find("halloween2026",1,true) and
+                (full:find("minigame",1,true) or full:find("room",1,true) or full:find("hotel",1,true))) then
+                found[#found+1]=d
+            end
         end
     end
-    log("HGUI values",n)
+    table.sort(found,function(a,b) return a:GetFullName()<b:GetFullName() end)
+    log("MODULES replicated matching="..#found)
+    for i=1,math.min(#found,120) do log("MODULE",found[i]:GetFullName(),attrsAndTags(found[i])) end
+
+    if type(getloadedmodules)=="function" then
+        local ok,mods=pcall(getloadedmodules)
+        if ok and type(mods)=="table" then
+            local loaded={}
+            for _,m in ipairs(mods) do
+                if typeof(m)=="Instance" and m:IsA("ModuleScript") then
+                    local full=m:GetFullName():lower()
+                    if full:find("hauntlet",1,true) then loaded[#loaded+1]=m:GetFullName() end
+                end
+            end
+            table.sort(loaded)
+            log("MODULES loaded hauntlet="..#loaded)
+            for _,name in ipairs(loaded) do log("LOADED_MODULE",name) end
+        else log("MODULES getloadedmodules failed") end
+    else
+        log("MODULES getloadedmodules unavailable")
+    end
 end
-dumpHauntletStructure()
-dumpHauntletGui()
-scan("GUI",player:FindFirstChild("PlayerGui"),35,match)
-local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-if root then
-    local doors,seen={},0
-    for _,obj in ipairs(workspace:GetDescendants()) do
-        seen+=1
-        if seen>35000 then break end
-        if obj:IsA("BasePart") and obj.Name:lower():find("door",1,true) then
-            local d=(obj.Position-root.Position).Magnitude
-            if d<120 then doors[#doors+1]={obj=obj,d=d} end
+
+log("START",os.date("!%Y-%m-%dT%H:%M:%SZ"))
+dumpState()
+local active=dumpCurrentRun()
+
+-- These are static/read-only discoveries and are especially useful during the cooldown.
+dumpHauntletModules()
+dumpTemplates()
+
+if not active then
+    local ClientData=loadFsys("ClientData")
+    if ClientData then
+        local ok,data=pcall(function() return ClientData.get_data() end)
+        local personal=ok and type(data)=="table" and data[player.Name] or nil
+        if type(personal)=="table" then
+            log("PLAYER hauntlet_manager",preview(personal.halloween_2026_hauntlet_manager))
+            log("PLAYER hauntlet_cycle",preview(personal.hauntlet_cycle_timestamp))
+            log("PLAYER minigame_timestamps",preview(personal.minigame_timestamps))
         end
     end
-    table.sort(doors,function(a,b) return a.d<b.d end)
-    log("Nearby door parts",#doors)
-    for i=1,math.min(#doors,15) do
-        local v=doors[i]
-        log("DOOR",math.floor(v.d).." studs",v.obj:GetFullName(),"attributes:",preview(v.obj:GetAttributes()))
-    end
 end
-log("END - say whether this was lobby, queue or active room")
+log("END")
