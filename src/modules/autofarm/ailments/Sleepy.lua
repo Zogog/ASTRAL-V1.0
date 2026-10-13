@@ -20,6 +20,8 @@ return function(ASTRAL)
             return false, "Interior sleep fallback remotes unavailable"
         end
 
+        local unsubscribe = S:Remote("HousingAPI/UnsubscribeFromHouse")
+        if unsubscribe then pcall(function() S:Call(unsubscribe) end) end
         local moved, moveReason = S:Call(setLocation, "MainMap", nil, "MainMap")
         if not moved then return false, moveReason end
         task.wait(1.25)
@@ -93,7 +95,11 @@ return function(ASTRAL)
             local bed, reason = Furniture:FindMatching(function(record)
                 return tostring(record.id or ""):lower():find("bed", 1, true) ~= nil
             end, "owned furniture id containing 'bed'")
-            if not bed then return false, reason end
+            if not bed then
+                S:Log("sleepy: egg owned bed unavailable (" .. tostring(reason)
+                    .. "); trying MainMap campsite sleepingbag fallback")
+                return useInteriorSleepFallback(pet, context)
+            end
 
             local root, petChar = S:PetRoot()
             if not root or not petChar then return false, "Equipped pet model unavailable" end
@@ -101,8 +107,16 @@ return function(ASTRAL)
             S:Log("sleepy: egg using " .. tostring(bed.id) .. " from slot " .. tostring(bed.slot) .. " / Seat1")
             local used, err = S:Call(remote, Player,
                 bed.unique, "Seat1", { cframe = root.CFrame }, petChar)
-            if not used then return false, err end
-            return S:WaitClear("sleepy", pet, context, 32)
+            if not used then
+                S:Log("sleepy: egg owned bed activation failed (" .. tostring(err)
+                    .. "); trying MainMap campsite sleepingbag fallback")
+                return useInteriorSleepFallback(pet, context)
+            end
+            local completed, why = S:WaitClear("sleepy", pet, context, 32)
+            if completed or not Game:PetHasAilment("sleepy") then return completed, why end
+            S:Log("sleepy: egg owned bed did not complete (" .. tostring(why)
+                .. "); trying MainMap campsite sleepingbag fallback")
+            return useInteriorSleepFallback(pet, context)
         end
 
         local completed, reason = S:UseFurniture(
@@ -113,7 +127,7 @@ return function(ASTRAL)
         end
 
         S:Log("sleepy: owned crib did not progress (" .. tostring(reason)
-            .. "); trying D&S MainMap sleepingbag fallback")
+            .. "); trying MainMap campsite sleepingbag fallback")
         return useInteriorSleepFallback(pet, context)
     end, 30)
 end
