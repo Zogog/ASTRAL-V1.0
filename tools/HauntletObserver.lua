@@ -1,4 +1,4 @@
--- ASTRAL Hauntlet 2 passive observer v0.1 - READ ONLY.
+-- ASTRAL Hauntlet 2 passive observer v0.2 - READ ONLY.
 -- Arm before a run. It automatically records each room transition, visible door kinds,
 -- timer/HUD changes, generated room types, Bolt state and Hauntlet hotbar text.
 -- No remotes, movement, interactions, or game-state mutation.
@@ -11,7 +11,7 @@ local player=Players.LocalPlayer
 local function log(...)
     local a={}
     for i=1,select("#",...) do a[i]=tostring(select(i,...)) end
-    print("[ASTRAL HAUNTLET OBS v0.1] "..table.concat(a," "))
+    print("[ASTRAL HAUNTLET OBS v0.2] "..table.concat(a," "))
 end
 
 local function posOf(obj)
@@ -22,15 +22,40 @@ local function posOf(obj)
     end
 end
 
+local function relPath(root,d)
+    local parts={}
+    local x=d
+    while x and x~=root do
+        table.insert(parts,1,x.Name)
+        x=x.Parent
+    end
+    return table.concat(parts,".")
+end
+
 local function guiText(root)
     if not root then return "" end
     local out={}
     for _,d in ipairs(root:GetDescendants()) do
         if (d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox")) and d.Visible then
             local s=tostring(d.Text or ""):gsub("%s+"," ")
-            if s~="" then out[#out+1]=d.Name.."="..s end
+            if s~="" then out[#out+1]=relPath(root,d).."="..s end
         elseif d:IsA("ValueBase") then
-            out[#out+1]=d.Name.."="..tostring(d.Value)
+            out[#out+1]=relPath(root,d).."="..tostring(d.Value)
+        end
+    end
+    table.sort(out)
+    return table.concat(out," | ")
+end
+
+local function guiImages(root)
+    if not root then return "" end
+    local out={}
+    for _,d in ipairs(root:GetDescendants()) do
+        if (d:IsA("ImageLabel") or d:IsA("ImageButton")) and d.Visible then
+            local image=tostring(d.Image or "")
+            if image~="" then
+                out[#out+1]=relPath(root,d).."="..image
+            end
         end
     end
     table.sort(out)
@@ -127,7 +152,12 @@ local function snapshot(reason)
     local rewards=pg and pg:FindFirstChild("MinigameRewardsApp")
     log("HUD",guiText(inGame))
     log("HOTBAR",guiText(hotbar))
+    log("HOTBAR_IMAGES",guiImages(hotbar))
+    log("INGAME_IMAGES",guiImages(inGame))
     log("REWARDS",guiText(rewards))
+
+    local hum=player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+    if hum then log("HUMANOID","health="..tostring(hum.Health),"max="..tostring(hum.MaxHealth)) end
 
     local bolt=workspace:FindFirstChild("Bolt")
     if bolt then
@@ -144,6 +174,7 @@ local lastRoom=nil
 local lastActive=false
 local lastHotbar=""
 local lastBolt=false
+local lastHealth=nil
 local lastTick=0
 
 while task.wait(0.12) do
@@ -183,6 +214,12 @@ while task.wait(0.12) do
             if bolt~=lastBolt then
                 lastBolt=bolt
                 log("BOLT_CHANGE",bolt)
+            end
+            local hum=player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+            local hp=hum and hum.Health or nil
+            if hp~=lastHealth then
+                lastHealth=hp
+                log("HEALTH_CHANGE",tostring(hp))
             end
         end
     end
