@@ -1,5 +1,5 @@
--- ASTRAL Hauntlet 2 standalone runner v0.1
--- First autonomous attempt. Starts only after the normal Hauntlet client is participating.
+-- ASTRAL Hauntlet 2 standalone runner v0.2
+-- Autonomous door runner with inter-floor handoff. Starts only after the normal Hauntlet client is participating.
 -- Uses the live HauntletMinigameClient state and its own message_server("try_pick_door", index)
 -- path discovered from the normal door callbacks. No movement/teleport simulation and no item use yet.
 
@@ -20,7 +20,7 @@ local function log(...)
     for i = 1, select("#", ...) do
         out[i] = tostring(select(i, ...))
     end
-    print("[ASTRAL HAUNTLET RUN v0.1] " .. table.concat(out, " "))
+    print("[ASTRAL HAUNTLET RUN v0.2] " .. table.concat(out, " "))
 end
 
 local function getClient()
@@ -250,6 +250,7 @@ log("Start Hauntlet normally; this script takes over once room choices are live.
 
 local attached = false
 local lastHandledRoom = nil
+local waitingForInterfloor = false
 local stoppedForError = false
 
 while alive() and task.wait(0.05) do
@@ -260,11 +261,33 @@ while alive() and task.wait(0.05) do
         if not attached then
             attached = true
             lastHandledRoom = nil
+            waitingForInterfloor = false
             log("ATTACHED", tostring(run.minigame_id or "?"))
         end
 
         local roomIndex = tonumber(run.current_room_index) or 0
         local choices = currentChoices(run)
+
+        -- Every tenth room is an inter-floor/Nexus choice rather than a normal
+        -- three-door room. We have not yet captured that interaction path, so do
+        -- not guess or spam a message. Hand that choice to the player, then resume
+        -- automatically as soon as the next normal room appears.
+        if roomIndex >= 10 and roomIndex % 10 == 0 and #choices == 0 then
+            if not waitingForInterfloor then
+                waitingForInterfloor = true
+                lastHandledRoom = roomIndex
+                local runner = getRunner(run)
+                log("INTER-FLOOR", "room=" .. roomIndex,
+                    "room_model=" .. tostring(run.current_room and run.current_room.Name),
+                    "hp=" .. tostring(runner and runner.health or "?"))
+                log("INVENTORY", inventoryString(run))
+                log("MANUAL ACTION NEEDED - choose the between-floor minigame; runner will resume automatically afterward")
+            end
+        elseif #choices > 0 and waitingForInterfloor then
+            waitingForInterfloor = false
+            lastHandledRoom = nil
+            log("INTER-FLOOR COMPLETE - normal doors returned; autonomous running resumed")
+        end
 
         if roomIndex >= 1
             and #choices > 0
